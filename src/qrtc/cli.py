@@ -141,8 +141,8 @@ def cmd_record_lb(args: argparse.Namespace) -> int:
 def cmd_check_sub(args: argparse.Namespace) -> int:
     spec = config.load_spec()
     test_ids = io.read_features(spec, spec.x_test)[spec.id_col].to_numpy()
-    problems = submit.validate_submission(pd.read_csv(args.path), spec, test_ids,
-                                          submit.load_sample(spec))
+    sub = pd.read_csv(config.resolve_shared(args.path))
+    problems = submit.validate_submission(sub, spec, test_ids, submit.load_sample(spec))
     print("OK" if not problems else "INVALID: " + "; ".join(problems))
     return 1 if problems else 0
 
@@ -153,7 +153,7 @@ def cmd_score_hidden(args: argparse.Namespace) -> int:
     if not hidden or not hidden.exists():
         print("no hidden_y_test configured (only rehearsal datasets have one)")
         return 1
-    score = platforms.hidden_score(spec, pd.read_csv(args.path))
+    score = platforms.hidden_score(spec, pd.read_csv(config.resolve_shared(args.path)))
     print(f"hidden {spec.metric} = {score:.5f}")
     return 0
 

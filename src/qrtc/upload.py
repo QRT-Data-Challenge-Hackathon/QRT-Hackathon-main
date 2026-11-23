@@ -204,9 +204,9 @@ def upload_file(path: str | Path, message: str = "", final: bool = False,
     spec = spec or config.load_spec()
     cfg = cfg or load_upload_config()
     agent = _require_uploader(cfg)
-    file = Path(path).expanduser().resolve()
+    file = config.resolve_shared(path)
     if not file.is_file():
-        raise UploadError(f"{file} not found")
+        raise UploadError(f"{path} not found (looked in {Path.cwd()} and {config.SHARED_ROOT})")
     _validate(spec, file)
     digest = hashlib.sha256(file.read_bytes()).hexdigest()
     with _locked():

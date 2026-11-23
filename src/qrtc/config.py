@@ -123,6 +123,18 @@ def _validate(spec: Spec) -> Spec:
     return spec
 
 
+def resolve_shared(path: str | Path) -> Path:
+    """``path`` if it exists, else the same relative path inside the main checkout.
+
+    Agents work in worktrees but ``submissions/``, ``runs/`` and ``data/`` live in the main
+    checkout, so ``submissions/x.csv`` must work from any worktree."""
+    given = Path(path).expanduser()
+    if given.is_absolute() or given.exists():
+        return given.resolve()
+    shared = SHARED_ROOT / given
+    return shared.resolve() if shared.exists() else given.resolve()
+
+
 def config_path(path: str | Path | None = None) -> Path:
     """The spec file in use: ``path``, else $QRTC_CONFIG, else competition.toml."""
     cfg_path = Path(path or os.environ.get("QRTC_CONFIG") or DEFAULT_CONFIG)
