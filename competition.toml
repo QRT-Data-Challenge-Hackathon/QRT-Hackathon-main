@@ -35,3 +35,23 @@ y_train = "y_train.csv"       # "" if the target is inside x_train
 x_test = "X_test.csv"
 sample_submission = "sample_submission.csv"
 hidden_y_test = "y_test_hidden.csv"   # rehearsal only; "" at the event
+
+# [upload] — who may upload, and where. Fill it at the briefing (docs/PLAYBOOK.md §3):
+#   backend  local   rehearsal only: scores against hidden_y_test, public/private split
+#            browser web form: `qrtc upload` reserves + logs, the uploader agent (Claude in
+#                    Chrome, logged in by a human beforehand) uploads the printed file, then
+#                    `qrtc upload-confirm <id> --score <public>`
+#            kaggle  `kaggle competitions submit` (set competition = "<slug>")
+#            http    multipart POST to url; secrets via headers_env = {"Authorization" = "ENV_VAR"}
+#   uploaders: AGENT_NAMEs allowed to upload — at the event exactly ONE (the Submitter)
+#   max_total / max_per_day: the platform's limits (0 = none); reserve_final: slots that only
+#   `--final` uploads may use (set 2 at the event: the two finals)
+[upload]
+backend = "local"
+uploaders = ["*"]
+max_total = 8
+max_per_day = 0
+reserve_final = 2
+public_fraction = 0.5
+url = ""                      # browser: submission page; http: POST endpoint (https only)
+competition = ""              # kaggle: competition slug

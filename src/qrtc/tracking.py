@@ -95,15 +95,19 @@ def load_preds(run_id: str, train_ids: np.ndarray | None = None,
     return preds
 
 
-def record_lb(run_id: str, public_score: float, note: str = "") -> Path:
-    """Store the public leaderboard score of a submitted run."""
-    config.LB_DIR.mkdir(parents=True, exist_ok=True)
-    path = config.LB_DIR / f"{run_id}.json"
+def record_lb(run_id: str, public_score: float, note: str = "",
+              competition: str | None = None) -> Path:
+    """Store the public leaderboard score of a submitted run (rehearsal scores stay local)."""
     payload = {"run_id": run_id, "public_lb": public_score, "note": note,
                "recorded": datetime.now().isoformat(timespec="seconds")}
-    path.write_text(json.dumps(payload, indent=2))
+    text = json.dumps(payload, indent=2)
     config.SHARED_LB_DIR.mkdir(parents=True, exist_ok=True)
-    (config.SHARED_LB_DIR / f"{run_id}.json").write_text(json.dumps(payload, indent=2))
+    path = config.SHARED_LB_DIR / f"{run_id}.json"
+    path.write_text(text)
+    if not (competition or "").startswith("rehearsal"):  # committed copy, cross-machine
+        config.LB_DIR.mkdir(parents=True, exist_ok=True)
+        path = config.LB_DIR / f"{run_id}.json"
+        path.write_text(text)
     return path
 
 

@@ -27,6 +27,8 @@ catboost_info/
 runs/
 submissions/*.csv
 submissions/*.zip
+submissions/ledger.jsonl
+submissions/.upload.lock
 
 # Agent worktrees (one per agent; see AGENTS.md)
 .worktrees/

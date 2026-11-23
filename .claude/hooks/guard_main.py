@@ -10,6 +10,8 @@ Blocks (exit 2, reason on stderr):
   * `gh pr merge` unless it is a plain squash merge (`--squash`, no `--admin`, no `--auto`,
     no `--rebase`/`--merge`); mutating `gh api` calls on protection, rulesets, merges or
     protected refs; graphql merge mutations; `gh repo delete` / default-branch edits
+  * `kaggle competitions submit` in any form (uploads go through `uv run qrtc upload`, which
+    validates, enforces the submission budget and writes the ledger; AGENTS.md §9.1)
   * unparseable commands that mention git/gh (fail closed)
 
 This repo is private on a free plan, so GitHub branch protection is unavailable: this hook plus
@@ -52,6 +54,7 @@ GH_GRAPHQL_GUARDED = re.compile(
 GH_MERGE_FORBIDDEN = frozenset({"--admin", "--auto", "--rebase", "-r", "--merge", "-m"})
 GH_API_WRITE_FLAGS = frozenset({"-f", "-F", "--field", "--raw-field", "--input"})
 MENTIONS_GIT = re.compile(r"\b(git|gh)\b")
+KAGGLE_LAUNCHER = re.compile(r"kaggle|uvx?|pipx|python[0-9.]*")
 
 BranchLookup = Callable[[str], str | None]
 
@@ -245,6 +248,19 @@ def check_gh(args: list[str]) -> str | None:
     return None
 
 
+def check_kaggle(argv: list[str]) -> str | None:
+    """Block `kaggle competitions submit` / `kaggle c submit`, also via uvx/uv run/python -m."""
+    if not argv or not KAGGLE_LAUNCHER.fullmatch(os.path.basename(argv[0])):
+        return None
+    for idx, token in enumerate(argv):
+        if os.path.basename(token) == "kaggle" and argv[idx + 1 : idx + 3] in (
+            ["competitions", "submit"], ["c", "submit"]
+        ):
+            return ("upload with `uv run qrtc upload <file>` (validation, budget, ledger), "
+                    "not `kaggle competitions submit`")
+    return None
+
+
 def nested_script(prog: str, args: list[str]) -> str | None:
     """Script text run by `bash -c`, `bash -lc`, `eval ...`, else None."""
     if prog == "eval":
@@ -287,7 +303,7 @@ def evaluate(command: str, cwd: str, lookup: BranchLookup = current_branch) -> s
             if target:
                 switched[repo] = target
         else:
-            reason = check_gh(args) if prog == "gh" else None
+            reason = check_gh(args) if prog == "gh" else check_kaggle(argv)
         if reason:
             return reason
     return None

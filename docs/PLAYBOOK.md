@@ -31,6 +31,10 @@ the same style.**
       it (write a `configs/ens167.toml`): `ROW_ID`, `TS`, `ALLOCATION`, `GROUP`, `TARGET`
       (real return, `binarize_target = true`), metric accuracy.
 - [ ] Logistics: chargers, power strip, phone hotspot, agent logins tested, `brew install libomp`.
+- [ ] Upload rehearsal (Submitter laptop): `make rehearse`, then `uv run qrtc baseline`,
+      `uv run qrtc upload submissions/<file>.csv -m test`, `uv run qrtc uploads --reveal`
+      (local backend: public vs hidden private score). If using Claude in Chrome: extension
+      installed, Chrome profile ready for a human login.
 
 ## 3. Briefing questions (Captain asks, Validator writes answers in §9 verbatim)
 
@@ -42,6 +46,9 @@ the same style.**
 6. **External data** allowed? (default: no)
 7. If we find **hidden structure** (recoverable date order, overlapping lags, ID order) — may we use it? (default: no)
 8. Presentation / code review? Prizes?
+9. **How do we submit** (web form, Kaggle, API)? Who logs in, one account per team? Is a
+   submission that fails validation counted? → fill `[upload]` (backend, url/slug,
+   `max_total`, `max_per_day`, `reserve_final = 2`, ONE uploader) in the spec PR.
 
 ## 4. The clock (contest ≈ 18:20–21:20; anchor start to data release, end to the deadline)
 
@@ -50,14 +57,14 @@ the same style.**
 | 17:30–18:00 | before | Sit together near power; `make check` + quickstart green on every laptop | all green |
 | 18:00–18:20 | briefing | §3 questions; Plan A (data) or B (C3, §7) | §9 filled |
 | 18:20–18:30 | +0–10 | Read statement, metric, sample submission. **Nobody codes.** Captain puts files in `data/raw/` | one sentence: "predict X per ID, scored by Y; test differs by Z" |
-| 18:30–18:40 | +10–20 | Validator: `competition.toml` from closest rehearsal config → PR → merge. `qrtc eda`; adversarial AUC | spec merged |
-| 18:40–18:50 | +20–30 | Captain uploads a **trivial valid entry** (majority / benchmark) after `qrtc check-sub` | scored entry |
-| 18:50–19:15 | +30–55 | `qrtc baseline` lgbm + logreg/ridge; Captain submits the better; `record-lb` | CV ≈ LB within noise (else fix folds!) |
+| 18:30–18:40 | +10–20 | Validator: `competition.toml` (incl. `[upload]`) from closest rehearsal config → PR → merge. `qrtc eda`; adversarial AUC | spec merged |
+| 18:40–18:50 | +20–30 | Submitter: `qrtc upload` a **trivial valid entry** (majority / benchmark) | scored entry in `qrtc uploads` |
+| 18:50–19:15 | +30–55 | `qrtc baseline` lgbm + logreg/ridge; Submitter uploads the better (score lands in `qrtc lb`) | CV ≈ LB within noise (else fix folds!) |
 | 19:15–19:20 | +55–60 | Stand-up: four lanes, written tasks | |
 | 19:20–20:35 | +60–135 | **Lanes A–D** (§5); check-ins at +90 and +120; merge gains > 1 std | runs logged |
 | 20:35–20:55 | +135–155 | Final features, 3–5 seeds, `qrtc blend` (rank/hill); pick **two finals**: best-CV blend + simplest near-best | 2 candidates |
 | 20:55–21:00 | +155–160 | `check-sub`, row count, id set, class balance, corr vs last good file | both pass |
-| **21:00** | **T−20** | **Captain uploads both, selects them. CODE FREEZE.** | both scored |
+| **21:00** | **T−20** | **Captain picks; Submitter `qrtc upload --final` both; Captain selects them on the platform. CODE FREEZE.** | both scored |
 | 21:00–21:20 | T−20…0 | Verify; resubmit safety net if needed; 3 slides if judged | nothing new started |
 
 Longer clock → stretch only the lanes. Shorter → cut lanes, never the first entry, the

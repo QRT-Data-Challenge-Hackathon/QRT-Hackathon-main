@@ -23,3 +23,10 @@ y_train = "y_train.csv"
 x_test = "X_test.csv"
 sample_submission = "sample_submission.csv"
 hidden_y_test = "y_test_hidden.csv"
+
+[upload]                      # rehearsal: a local "platform" with a public/private split
+backend = "local"
+uploaders = ["*"]             # anyone may rehearse uploading; at the event: ONE name
+max_total = 8                 # practise living within a submission budget
+reserve_final = 2             # the last 2 slots need `qrtc upload --final`
+public_fraction = 0.5

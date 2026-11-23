@@ -13,7 +13,10 @@ coordination, merging, modelling discipline, event roles) live in AGENTS.md and 
 `main`; pushes to `main` (explicit, implicit, `HEAD`, `--all`, `--mirror`, deletes); force pushes
 (`-f`, `--force`, `+ref`); `--no-verify`; `gh pr merge` unless it is a plain `--squash` merge
 (no `--admin`, `--auto`, `--merge`, `--rebase`); branch-protection / ruleset / merge mutations via
-`gh api`; `gh repo delete`; default-branch changes. If it blocks you, **stop and tell the user**.
+`gh api`; `gh repo delete`; default-branch changes; `kaggle competitions submit`.
+`.claude/hooks/guard_upload.py` runs before every browser `file_upload` and blocks files that
+`uv run qrtc upload` has not reserved (sha256 must match a `pending` ledger entry). If a hook
+blocks you, **stop and tell the user**.
 Never rephrase a command to slip past it, and never edit the hook, `.githooks/` or
 `.claude/settings.json` to weaken them.
 
@@ -53,4 +56,13 @@ brokerage/order tools of any MCP.
 - Report results as `run_id: metric mean ± std (baseline run_id: …)` in the PR, not only in chat.
 - Write findings about the competition (rules from the briefing, data quirks, leaks) into
   `docs/PLAYBOOK.md` §Event log via a small PR.
-- Never upload to the competition platform; hand the Captain the `submissions/...csv` path.
+- Upload only if your `AGENT_NAME` is in `[upload].uploaders` (the Submitter, AGENTS.md §9.1);
+  otherwise hand the Submitter the `submissions/...csv` path.
+- Submitter with `backend = "browser"` (Claude in Chrome): a human logs in to the platform
+  first — you never type credentials. Then `uv run qrtc upload <file> -m "…"` → read the page
+  (`find` the file input) → `file_upload` with exactly the printed path → submit → read the
+  public score → `uv run qrtc upload-confirm <id> --score <s>`. Claude asks the user in chat
+  before clicking a platform's submit button (a standing browser-safety rule), so tell the
+  Captain to watch the chat at upload milestones; `kaggle`/`http` backends need no click.
+  If `file_upload` rejects the path as not shared with the session, `cp` the file into your
+  worktree and upload the copy (the hook checks the sha256, not the path), or ask the user.
