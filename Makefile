@@ -3,13 +3,17 @@ KIND ?= stock_sign
 MODEL ?= lgbm
 KINDS := stock_sign allocation electricity football survival
 
-.PHONY: help setup check lint test nbcheck nbstrip synth rehearse eda baseline lb lab status clean-runs
+.PHONY: help setup models check lint test nbcheck nbstrip synth rehearse eda baseline lb lab status clean-runs
 
 help:            ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
 
 setup:           ## deps, git guard hooks, Jupyter kernel (once per clone)
 	@scripts/setup.sh
+
+models:          ## pretrained TabICL/TabPFN/TabDPT: install, download weights, offline check
+	uv sync --all-groups --extra fm
+	uv run python scripts/prefetch_models.py
 
 check: lint test nbcheck  ## everything CI runs; must be green before a PR
 

@@ -83,7 +83,9 @@ make lab                                # Jupyter Lab
 ```
 
 Models (`--model`): `lgbm xgb catboost logreg ridge extratrees rf hgb`, survival:
-`coxph coxnet rsf gbsa xgb`, presets: `lgbm_shallow lgbm_deep xgb_shallow catboost_shallow`.
+`coxph coxnet rsf gbsa xgb`, presets: `lgbm_shallow lgbm_deep xgb_shallow catboost_shallow`,
+pretrained in-context models (after `make models`): `tabicl tabpfn tabdpt` — see
+[docs/MODELS.md](docs/MODELS.md).
 
 ---
 
@@ -95,6 +97,7 @@ configs/rehearsal/        specs for the 5 synthetic shapes of past QRT challenge
 src/qrtc/                 shared library (tested): config io cv metrics features models train
                           tracking ensemble postprocess submit eda synthetic optim cli
                           upload (ledger, budget) platforms (local/browser/kaggle/http)
+                          foundation + fm_worker (TabICL/TabPFN/TabDPT in a child process)
 notebooks/00-03_*.ipynb   quickstart, EDA, experiment template, blend & submit (no outputs!)
 experiments/<agent>/      YOUR notebooks/scripts; only you edit your folder
 templates/optim/          C3 fallback: stdin/stdout Python template, C++ annealing template
@@ -102,6 +105,7 @@ tests/                    pytest (unit + integration + hook tests)
 results/registry/, lb/    run metadata / public scores, committed via PRs (tiny JSON)
 runs/, submissions/, data/  local only, gitignored, live in the MAIN checkout (shared by worktrees)
 docs/PLAYBOOK.md          event plan, roles, briefing questions, recipes, leak table
+docs/MODELS.md            pretrained models: what, when, licences, measured cost
 reports/, research_notes/ the research on QRT's format (read-only)
 scripts/                  agent.sh (worktrees), safe_merge.sh, setup.sh, check_notebooks.py
 .githooks/, .claude/      guards (do not weaken)
@@ -232,8 +236,9 @@ CV numbers from different agents comparable and blendable.
   ≥ 80%. Notebooks/experiments are exempt from tests, not from the contract.
 - Notebooks are committed **without outputs** (`uv run python scripts/check_notebooks.py --fix`).
 - No `print` debugging left in `src/` except CLI output; errors are raised with clear messages.
-- Don't `import torch` in the same process before LightGBM (known crash); on macOS LightGBM may
-  need `brew install libomp`.
+- Never load torch and LightGBM into one process: on macOS their two OpenMP runtimes segfault in
+  either order. Use `tabicl`/`tabpfn`/`tabdpt` through qrtc, which runs them in a worker process
+  (`qrtc.fm_worker`). On macOS LightGBM may need `brew install libomp`.
 
 ---
 
