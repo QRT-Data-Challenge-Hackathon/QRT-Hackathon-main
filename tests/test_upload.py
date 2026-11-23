@@ -268,3 +268,18 @@ def test_cli_upload_flow(env, tmp_path, capsys):
     assert cli.main(["upload-confirm", "U002", "--score", "0.5"]) == 0
     assert cli.main(["uploads"]) == 0
     assert "U002" in capsys.readouterr().out
+
+
+def test_relative_submission_path_found_from_a_worktree(env, tmp_path, monkeypatch):
+    path = make_sub(env)  # lives in <shared>/submissions_dir/
+    monkeypatch.setattr(config, "SHARED_ROOT", config.SUBMISSIONS_DIR.parent)
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    monkeypatch.chdir(worktree)
+    assert config.resolve_shared(f"submissions_dir/{path.name}") == path.resolve()
+    assert cli.main(["check-sub", f"submissions_dir/{path.name}"]) == 0
+    assert upload_file(f"submissions_dir/{path.name}", cfg=cfg())["status"] == "scored"
+    with pytest.raises(UploadError, match="looked in"):
+        upload_file("submissions_dir/missing.csv", cfg=cfg())
+    (worktree / "local.csv").write_text("x")
+    assert config.resolve_shared("local.csv") == (worktree / "local.csv").resolve()
