@@ -192,7 +192,8 @@ def _run_backend(spec: Spec, cfg: UploadConfig, record: dict) -> dict[str, Any]:
 def _store_score(record: dict[str, Any]) -> None:
     if record.get("public") is not None and record.get("run_id"):
         tracking.record_lb(record["run_id"], float(record["public"]),
-                           note=f"{record['upload_id']} {record.get('message', '')}".strip())
+                           note=f"{record['upload_id']} {record.get('message', '')}".strip(),
+                           competition=record.get("competition"))
 
 
 def upload_file(path: str | Path, message: str = "", final: bool = False,

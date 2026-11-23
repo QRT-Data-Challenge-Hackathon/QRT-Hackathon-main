@@ -127,7 +127,9 @@ def test_local_upload_scores_public_and_hides_private(env):
     record = upload_file(make_sub(env, "r1"), message="first", cfg=cfg())
     assert record["status"] == "scored" and record["run_id"] == "r1"
     assert 0.3 < record["public"] < 0.7 and 0.3 < record["private"] < 0.7
-    assert json.loads((config.LB_DIR / "r1.json").read_text())["public_lb"] == record["public"]
+    shared = json.loads((config.SHARED_LB_DIR / "r1.json").read_text())
+    assert shared["public_lb"] == record["public"]
+    assert not (config.LB_DIR / "r1.json").exists()  # rehearsal scores are never committed
     assert "private" not in upload_table(env.name).columns
     assert "private" in upload_table(env.name, reveal=True).columns
 
