@@ -1,0 +1,24 @@
+# Rehearsal config for the synthetic "electricity" dataset: make synth KIND=electricity && QRTC_CONFIG=configs/rehearsal/electricity.toml ...
+[competition]
+name = "rehearsal-electricity"
+task = "regression"
+metric = "spearman"
+id_col = "ID"
+target_cols = ["TARGET"]
+date_col = "DAY_ID"
+group_col = "COUNTRY"
+submission_cols = []
+cv = "auto"
+n_splits = 5
+seed = 42
+
+[metric_params]
+
+
+[files]
+dir = "data/synthetic/electricity"
+x_train = "X_train.csv"
+y_train = "y_train.csv"
+x_test = "X_test.csv"
+sample_submission = "sample_submission.csv"
+hidden_y_test = "y_test_hidden.csv"

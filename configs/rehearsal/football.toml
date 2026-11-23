@@ -1,0 +1,24 @@
+# Rehearsal config for the synthetic "football" dataset: make synth KIND=football && QRTC_CONFIG=configs/rehearsal/football.toml ...
+[competition]
+name = "rehearsal-football"
+task = "multiclass"
+metric = "accuracy"
+id_col = "ID"
+target_cols = ["HOME_WINS", "DRAW", "AWAY_WINS"]
+date_col = ""
+group_col = ""
+submission_cols = []
+cv = "auto"
+n_splits = 5
+seed = 42
+
+[metric_params]
+
+
+[files]
+dir = "data/synthetic/football"
+x_train = "X_train.csv"
+y_train = "y_train.csv"
+x_test = "X_test.csv"
+sample_submission = "sample_submission.csv"
+hidden_y_test = "y_test_hidden.csv"

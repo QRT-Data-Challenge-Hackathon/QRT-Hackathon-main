@@ -1,0 +1,25 @@
+#!/bin/sh
+# Repo guard (AGENTS.md §0). Enabled by: git config core.hooksPath .githooks (make setup).
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+case "$branch" in
+  main|master)
+    echo "pre-commit: refusing to commit on '$branch'. Use: scripts/agent.sh start <type> <topic>" >&2
+    exit 1 ;;
+esac
+status=0
+# No data, runs or submissions; no files > 2 MB.
+for f in $(git diff --cached --name-only --diff-filter=AM); do
+  case "$f" in
+    data/README.md|submissions/.gitkeep) ;;
+    data/*|runs/*|submissions/*) echo "pre-commit: '$f' is data/runs/submissions; never commit it" >&2; status=1 ;;
+  esac
+  if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 2097152 ]; then
+    echo "pre-commit: '$f' is larger than 2 MB" >&2; status=1
+  fi
+done
+# Notebooks must be committed without outputs.
+nbs=$(git diff --cached --name-only --diff-filter=AM -- '*.ipynb')
+if [ -n "$nbs" ]; then
+  python3 "$(git rev-parse --show-toplevel)/scripts/check_notebooks.py" $nbs || status=1
+fi
+exit $status
