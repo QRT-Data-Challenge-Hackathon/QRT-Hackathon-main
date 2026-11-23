@@ -5,12 +5,19 @@ hackathon, and how they are wired into the toolkit.
 
 ## Short version
 
-- **Use `--model tabicl` (TabICLv2) early, next to the LightGBM baseline.** Pretrained tabular
-  foundation models need no tuning, and on small and medium tables (up to ~50k rows, the size
-  of most QRT challenges) they usually beat tuned GBMs. Their errors differ from GBM errors,
-  so they also help blends (`qrtc blend <lgbm_run> <tabicl_run>`).
-- **Also available:** `--model tabpfn` (TabPFN v2) and `--model tabdpt` (TabDPT 1.3). All three
-  run offline on the M4 GPU and plug into `run_cv`, `save_run`, `blend` and `fit_full`.
+- **What they are good for:** a strong model that needs no tuning. On real small and medium
+  tables (up to ~50k rows, the size of most QRT challenges) the literature finds they usually
+  beat tuned GBMs (TabArena). Run one of them (`--model tabdpt`, fastest, or `--model tabicl`)
+  in the first hour, next to `logreg`/`ridge` and `lgbm_shallow`, and keep it if CV says so.
+- **What our own test showed (synthetic rehearsal data, table below):** they tie the linear
+  baselines and beat default LightGBM by ~4 points on small tables, because LightGBM overfits
+  there. They did **not** beat logreg/ridge, and blending them with logreg/ridge added nothing.
+  Our generators plant mostly linear signal, so this cannot show a nonlinear edge on real data,
+  but it is a warning: on noisy return-sign panels a regularised linear model is hard to beat.
+- **Pick one, not three.** TabICL, TabPFN and TabDPT agree with each other almost exactly (a
+  blend of all three scored the same as each alone). `--model tabpfn` (TabPFN v2) is the
+  third option. All three run offline on the M4 GPU and plug into `run_cv`, `save_run`,
+  `blend` and `fit_full`.
 - **Install and download before the event:** `make models` on every laptop. It installs the
   `fm` extra (torch, about 1.3 GB), downloads the weights (about 0.6 GB) and checks they run
   with `HF_HUB_OFFLINE=1`. `make setup` and `scripts/agent.sh start` include the extra
@@ -20,7 +27,7 @@ hackathon, and how they are wired into the toolkit.
   TabDPT was pretrained on real public tables (OpenML), which a strict "no external data" rule
   may forbid.
 - **Decide by CV, as always.** QRT write-ups found that deep nets did not pay on noisy
-  return-sign panels; in-context models are a different kind of model (no training, built-in
+  return-sign panels. In-context models are a different kind of model (no training, built-in
   regularisation), but their gain there is unproven until our CV shows it.
 - **No pretrained autoencoder helps here.** An anonymised table's columns mean nothing to a
   model pretrained elsewhere. The in-context models above are the useful kind of pretraining:
@@ -30,7 +37,8 @@ hackathon, and how they are wired into the toolkit.
 ## How to use
 
 ```bash
-uv run qrtc baseline --model tabicl                       # CV + run + submission, as usual
+uv run qrtc baseline --model tabdpt                       # CV + run + submission, as usual
+uv run qrtc baseline --model tabicl
 uv run qrtc baseline --model tabpfn --params '{"n_estimators": 4}'
 uv run qrtc baseline --model tabicl --params '{"max_rows": 20000, "n_bags": 3}'
 uv run qrtc blend <lgbm_run> <tabicl_run> --method hill
@@ -64,7 +72,21 @@ it predicts, so the screen can stutter: run one foundation-model job at a time p
 Synthetic rehearsal data only, so treat it as a smoke test of the plumbing and of relative
 cost, not as proof of the gain on the real problem.
 
-RESULTS_TABLE
+Default params, `qrtc baseline`, each rehearsal config's own CV (`time` for electricity,
+`stratified` for football, `date_blocks` for allocation). Mean ± std over folds; time is the
+whole 5-fold run.
+
+| Rehearsal set (train rows) | metric | ridge / logreg | lgbm | tabicl | tabpfn (v2) | tabdpt |
+|---|---|---|---|---|---|---|
+| electricity (1.4k) | Spearman | **0.261 ± 0.087** (0 s) | 0.135 ± 0.062 (2 s) | 0.250 ± 0.096 (43 s) | 0.252 ± 0.082 (50 s) | 0.254 ± 0.084 (32 s) |
+| football (4.5k) | accuracy | **0.557 ± 0.014** (0 s) | 0.517 ± 0.004 (19 s) | 0.556 ± 0.011 (205 s) | 0.556 ± 0.009 (338 s) | **0.557 ± 0.011** (46 s) |
+| allocation (13.5k) | accuracy | **0.525 ± 0.008** (0 s) | 0.517 ± 0.009 (`lgbm_shallow`, 6 s) | not run (~30 min) | not run | 0.520 ± 0.004 (504 s) |
+
+Blends (pooled OOF): football logreg 0.557, logreg + tabdpt 0.556, tabicl + tabpfn + tabdpt
+0.556; allocation logreg 0.525, logreg + tabdpt 0.525; electricity ridge 0.259, ridge + tabdpt
+0.246. Cost grows with training rows × predicted rows: allocation (10.8k context × 7.2k
+queries per fold) took ~100 s per fold for TabDPT, and TabICL/TabPFN are slower still, so cap
+`max_rows` on anything larger.
 
 ## The shortlist (checked on Hugging Face and PyPI, 23 Nov 2026)
 

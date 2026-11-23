@@ -104,9 +104,10 @@ splits, save the run, and report CV mean ± std vs run `<baseline id>`. Do not m
 | Survival, C-index (`survival`) | `group` by centre/hospital | `coxph` / `coxnet` | `rsf`, `gbsa`, `xgb` (cox); clinical risk features | output `risk_score` (higher = earlier death) |
 | Weighted accuracy (|y|-weighted, #44) | `date_blocks` | regress the real target | `weight_col = "abs_target"` | sign |
 
-Small tables (≤ ~50k training rows: `electricity`, `football`, `survival`-sized): run `tabicl`
-next to the first baseline; it needs no tuning ([MODELS.md](MODELS.md)). On noisy return-sign
-panels its gain is unproven: decide by CV like everything else.
+Small tables (≤ ~50k training rows): run one pretrained model (`tabdpt` is fastest, or
+`tabicl`) next to `logreg`/`ridge` in the first hour; it needs no tuning. On our synthetic
+rehearsals it tied the linear models and beat default LightGBM by ~4 points, but never beat
+logreg/ridge ([MODELS.md](MODELS.md)): decide by CV like everything else.
 
 What did **not** pay in QRT write-ups: PCA, autoencoders, deep nets, per-entity models, heavy
 stacking, Optuna tuning, de-meaning the target per day (throws away market drift).
