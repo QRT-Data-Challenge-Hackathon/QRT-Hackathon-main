@@ -341,3 +341,33 @@ def test_dash_c_tilde_expanded(guard):
     home_repo = os.path.expanduser("~/repo")
     lookup = lambda cwd: "main" if cwd == home_repo else "feat/x"
     assert guard.evaluate("git -C ~/repo commit -m x", "/elsewhere", lookup)
+
+
+# --- uploads go through qrtc ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "kaggle competitions submit -c x -f a.csv -m m",
+        "uvx kaggle competitions submit -c x -f a.csv",
+        "uv run --with kaggle kaggle c submit -c x -f a.csv",
+        "cd submissions && python -m kaggle competitions submit -c x -f a.csv -m hi",
+        "bash -c 'kaggle competitions submit -c x -f a.csv'",
+    ],
+)
+def test_direct_kaggle_submit_blocked(guard, cmd):
+    assert "qrtc upload" in guard.evaluate(cmd, "/repo", ON_FEATURE)
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "kaggle competitions submissions -c x",
+        "kaggle competitions download -c x",
+        "uv run qrtc upload submissions/a.csv --final",
+        "echo kaggle competitions submit",
+    ],
+)
+def test_kaggle_reads_and_qrtc_upload_allowed(guard, cmd):
+    assert guard.evaluate(cmd, "/repo", ON_FEATURE) is None

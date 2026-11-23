@@ -123,11 +123,15 @@ def _validate(spec: Spec) -> Spec:
     return spec
 
 
+def config_path(path: str | Path | None = None) -> Path:
+    """The spec file in use: ``path``, else $QRTC_CONFIG, else competition.toml."""
+    cfg_path = Path(path or os.environ.get("QRTC_CONFIG") or DEFAULT_CONFIG)
+    return cfg_path if cfg_path.is_absolute() else REPO_ROOT / cfg_path
+
+
 def load_spec(path: str | Path | None = None) -> Spec:
     """Load and validate the competition spec (default: $QRTC_CONFIG or competition.toml)."""
-    cfg_path = Path(path or os.environ.get("QRTC_CONFIG") or DEFAULT_CONFIG)
-    if not cfg_path.is_absolute():
-        cfg_path = REPO_ROOT / cfg_path
+    cfg_path = config_path(path)
     if not cfg_path.exists():
         raise SpecError(f"config not found: {cfg_path}")
     raw = tomllib.loads(cfg_path.read_text())

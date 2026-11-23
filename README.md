@@ -19,6 +19,7 @@ make check                       # lint + tests + notebook check
 uv run qrtc eda                  # on competition.toml (rehearsal stock_sign by default)
 uv run qrtc baseline --model lgbm_shallow
 uv run qrtc lb
+uv run qrtc upload submissions/<file>.csv -m "why"   # designated uploader only (AGENTS.md §9.1)
 ```
 
 At the event: put organiser files in `data/raw/`, edit `competition.toml` (start from the closest

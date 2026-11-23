@@ -25,15 +25,18 @@ overwrite each other, never break `main`, and never ship an unvalidated submissi
    weaken them, never change the default branch, never delete branches you do not own.
 6. **The contract files are frozen during the event** (§7.1): `competition.toml`,
    `src/qrtc/{cv,metrics,submit,io,config}.py`. Only the Validator's PRs change them.
-7. **Only the Captain uploads submissions.** Agents write predictions to disk; they never
-   submit, and never write "the final CSV".
+7. **Only the designated Submitter uploads, and only with `uv run qrtc upload`** (§9.1).
+   The Submitter is the one agent (or human) named in `[upload].uploaders`. Every other agent
+   writes predictions to disk and hands over the `submissions/…csv` path; it never uploads.
 8. **Never commit data, secrets, or notebook outputs.** `data/`, `runs/`, `submissions/*.csv`
    are gitignored; hooks reject notebooks with outputs and files > 2 MB.
 
 GitHub branch protection is **not available** on this private free-plan repo. The guards are
 local: `.githooks/` (pre-commit, pre-push; enabled by `make setup`) and the Claude Code
-PreToolUse hook `.claude/hooks/guard_main.py`. They are defence in depth; these rules are the
-real gate. If a guard blocks you, **stop and report it** — never rephrase a command to slip past.
+PreToolUse hooks `.claude/hooks/guard_main.py` (git, `kaggle competitions submit`) and
+`guard_upload.py` (browser uploads need a `qrtc upload` reservation). They are defence in
+depth; these rules are the real gate. If a guard blocks you, **stop and report it** — never
+rephrase a command to slip past.
 
 ---
 
@@ -72,6 +75,9 @@ uv run qrtc lb                          # team leaderboard (CV, public LB, agent
 uv run qrtc blend RUN1 RUN2 --method hill
 uv run qrtc check-sub submissions/<file>.csv
 uv run qrtc record-lb <run_id> <public_score>
+uv run qrtc upload submissions/<file>.csv -m "why"   # Submitter only (§9.1); --final, --dry-run
+uv run qrtc upload-confirm U003 --score 0.512         # browser/kaggle: record the public score
+uv run qrtc uploads                                   # ledger + submissions left
 QRTC_CONFIG=configs/rehearsal/football.toml uv run qrtc baseline   # rehearsal config
 make lab                                # Jupyter Lab
 ```
@@ -88,6 +94,7 @@ competition.toml          THE problem spec (files, id/target/date/group, task, m
 configs/rehearsal/        specs for the 5 synthetic shapes of past QRT challenges
 src/qrtc/                 shared library (tested): config io cv metrics features models train
                           tracking ensemble postprocess submit eda synthetic optim cli
+                          upload (ledger, budget) platforms (local/browser/kaggle/http)
 notebooks/00-03_*.ipynb   quickstart, EDA, experiment template, blend & submit (no outputs!)
 experiments/<agent>/      YOUR notebooks/scripts; only you edit your folder
 templates/optim/          C3 fallback: stdin/stdout Python template, C++ annealing template
@@ -234,12 +241,41 @@ CV numbers from different agents comparable and blendable.
 
 | Role | Owns | Never |
 |---|---|---|
-| **Captain** (human) | data drop, uploads, `record-lb`, final selection, the clock | lets an agent upload |
+| **Captain** (human) | data drop, platform login, picks the Submitter and the two finals, the clock | names two uploaders |
+| **Submitter** (one agent, or the Captain) | uploads via `qrtc upload`, confirms scores, reports them (§9.1) | uploads anything off the clock / not picked, or outside `qrtc upload` |
 | **Validator** (human + 1 agent) | contract files, leak/shift audits, approving claimed gains | approves own gains |
 | **Lane owners** (humans, 2–3 agents each) | one written task per agent, e.g. "per-date ranks of RET_1..5, report CV vs run X" | "improve the score" prompts |
 
 Milestones: trivial valid entry by T+30 min · date-grouped baseline by T+55 · lanes until
 T+135 · blend + two finals by T+155 · **code freeze at T−20**.
+
+### 9.1 Uploading submissions (Submitter protocol)
+
+- **One uploader.** At the briefing the Captain fills `[upload]` in `competition.toml`
+  (backend, the platform's limits, `reserve_final = 2`) and puts exactly **one** `AGENT_NAME`
+  in `uploaders`. One uploader = one ledger and one budget; the ledger is per machine, so two
+  uploaders on two laptops could overspend the platform's limit.
+- **Only through `uv run qrtc upload <file> -m "<run_id>: CV x ± y"`.** It refuses
+  non-uploaders, invalid files (same check as `check-sub`), files already uploaded, and
+  uploads beyond the budget; it logs every attempt in `<main checkout>/submissions/ledger.jsonl`
+  and stores the public score with `record-lb`. Try `--dry-run` first when unsure. Never upload
+  by another route: the hooks block `kaggle competitions submit` and browser uploads of files
+  without a reservation.
+- **What to upload:** the clock's milestones (trivial valid entry, baseline), then only
+  CV-backed improvements (> ~1 fold-std over the last upload, at most one per ~30 min), and the
+  two finals the Captain picks, with `--final` (the last `reserve_final` slots are kept for
+  them). Never upload "to see if the LB likes it": the public LB is noise (§7.2).
+- **Per backend:**
+  - `kaggle` / `http`: `qrtc upload` sends the file. Kaggle scores appear in
+    `kaggle competitions submissions -c <slug>`; record them with `qrtc upload-confirm <id> --score <s>`.
+  - `browser`: `qrtc upload` reserves a slot and prints the exact file. Upload **that** file on
+    the platform page, submit, read the public score, then `qrtc upload-confirm <id> --score <s>`
+    (no score yet: `qrtc upload-confirm <id>`; rejected: `--failed "<reason>"`, frees the slot).
+- **Credentials stay with humans:** a human logs in to the platform (browser) before the
+  contest; Kaggle keys live in `~/.kaggle/kaggle.json`; http secrets in environment variables
+  named in `[upload].headers_env`. Agents never type, print or commit passwords or tokens.
+- **After every upload:** report `U<id> <run_id> public=<s> CV=<cv>` to the Captain / in the PR,
+  and check `qrtc uploads` (slots left). A stuck `pending` entry blocks a slot until confirmed.
 
 ---
 
@@ -248,6 +284,7 @@ T+135 · blend + two finals by T+155 · **code freeze at T−20**.
 - Commit/push/merge on `main`, force-push, `--no-verify`, `--admin`, or weaken a guard.
 - Merge a draft, a `wip`/`do-not-merge` PR, a red-CI PR, or a PR you have not read.
 - Edit another agent's claimed files, experiments folder, runs or submissions.
-- Upload a submission (Captain only) or one that failed `qrtc check-sub`.
+- Upload unless you are the designated Submitter, or by any route other than
+  `uv run qrtc upload` (§9.1); upload a file that failed `qrtc check-sub`.
 - Exploit leaks or use external data without explicit organiser permission.
 - Commit organiser data, secrets, `.env`, or notebooks with outputs.

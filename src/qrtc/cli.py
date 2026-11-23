@@ -8,6 +8,9 @@
   record-lb RUN SCORE        store the public leaderboard score of a submitted run
   check-sub PATH             validate a submission file against the spec
   score-hidden PATH          score a submission against y_test_hidden (rehearsal only)
+  upload PATH [--final]      designated uploader only: validate, budget-check, log, upload
+  upload-confirm ID          record a browser/kaggle upload's outcome (--score S | --failed R)
+  uploads [--reveal]         ledger of uploads + remaining budget (--reveal: rehearsal private)
 """
 
 from __future__ import annotations
@@ -20,7 +23,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from qrtc import config, eda, ensemble, io, submit, synthetic, tracking
+from qrtc import config, eda, ensemble, io, platforms, submit, synthetic, tracking
+from qrtc import upload as uploads
 from qrtc.cv import detect_strategy, make_splits
 from qrtc.features import auto_categoricals, to_category
 from qrtc.metrics import get_metric
@@ -149,25 +153,41 @@ def cmd_score_hidden(args: argparse.Namespace) -> int:
     if not hidden or not hidden.exists():
         print("no hidden_y_test configured (only rehearsal datasets have one)")
         return 1
-    truth, sub = pd.read_csv(hidden), pd.read_csv(args.path)
-    sub = sub.rename(columns={c: f"{c}_pred" for c in spec.out_cols})
-    merged = truth.merge(sub, on=spec.id_col, validate="one_to_one")
-    pred_cols = [f"{c}_pred" for c in spec.out_cols]
-    truth_y = merged[list(spec.target_cols)]
-    if spec.binarize_target:
-        truth_y = (truth_y > 0).astype(int)
-    classes = io._class_labels(truth_y, spec)
-    y_true = io.encode_target(truth_y, classes)
-    pred = merged[pred_cols].to_numpy()
-    pred = pred[:, 0] if pred.shape[1] == 1 else pred
-    if spec.task in ("binary", "multiclass") and pred.ndim == 1 and pred.dtype == object:
-        pred = io.encode_target(merged[pred_cols], classes)
-    groups = None
-    if spec.date_col:
-        test = io.read_features(spec, spec.x_test)[[spec.id_col, spec.date_col]]
-        groups = merged[[spec.id_col]].merge(test, on=spec.id_col)[spec.date_col].to_numpy()
-    params = dict(spec.metric_params)
-    print(f"hidden {spec.metric} = {get_metric(spec.metric)(y_true, pred, groups=groups, **params):.5f}")
+    score = platforms.hidden_score(spec, pd.read_csv(args.path))
+    print(f"hidden {spec.metric} = {score:.5f}")
+    return 0
+
+
+def _upload_line(rec: dict) -> str:
+    public = rec.get("public")
+    score = f"public={public:.5f}" if isinstance(public, float) else "public=?"
+    final = " FINAL" if rec.get("final") else ""
+    return (f"{rec['upload_id']} {rec['status']}{final} {score} backend={rec['backend']} "
+            f"run={rec.get('run_id') or '-'} file={Path(rec['path']).name}")
+
+
+def cmd_upload(args: argparse.Namespace) -> int:
+    rec = uploads.upload_file(args.path, args.message, args.final, args.run, args.dry_run,
+                              args.allow_duplicate)
+    print(_upload_line(rec))
+    if rec.get("detail"):
+        print(rec["detail"])
+    return 0
+
+
+def cmd_upload_confirm(args: argparse.Namespace) -> int:
+    print(_upload_line(uploads.confirm(args.upload_id, args.score, args.failed)))
+    return 0
+
+
+def cmd_uploads(args: argparse.Namespace) -> int:
+    spec, cfg = config.load_spec(), platforms.load_upload_config()
+    table = uploads.upload_table(spec.name, reveal=args.reveal)
+    print(table.to_string() if not table.empty else "no uploads yet")
+    state = uploads.budget(uploads.read_ledger(), cfg, spec.name)
+    left = "unlimited" if state.left is None else state.left
+    print(f"\nbackend={cfg.backend} uploaders={list(cfg.uploaders)} used={state.used} "
+          f"(today {state.used_today}) left={left} kept_for_finals={cfg.reserve_final}")
     return 0
 
 
@@ -195,6 +215,16 @@ def build_parser() -> argparse.ArgumentParser:
          (("--note",), {"default": ""}))
     _add(sub, "check-sub", cmd_check_sub, (("path",), {}))
     _add(sub, "score-hidden", cmd_score_hidden, (("path",), {}))
+    _add(sub, "upload", cmd_upload, (("path",), {}), (("-m", "--message"), {"default": ""}),
+         (("--final",), {"action": "store_true", "help": "may use slots kept for finals"}),
+         (("--run",), {"help": "run id (default: from the file name)"}),
+         (("--dry-run",), {"action": "store_true", "help": "check everything, upload nothing"}),
+         (("--allow-duplicate",), {"action": "store_true"}))
+    _add(sub, "upload-confirm", cmd_upload_confirm, (("upload_id",), {}),
+         (("--score",), {"type": float, "help": "public score shown by the platform"}),
+         (("--failed",), {"metavar": "REASON", "help": "upload did not go through"}))
+    _add(sub, "uploads", cmd_uploads,
+         (("--reveal",), {"action": "store_true", "help": "show rehearsal private scores"}))
     return parser
 
 
