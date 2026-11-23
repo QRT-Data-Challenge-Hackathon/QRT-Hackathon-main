@@ -13,6 +13,7 @@ ETH Zürich, **Tue 24 Nov 2026, 18:00–22:00**.
 
 ```bash
 make setup                       # uv deps (Python 3.12), git guard hooks, Jupyter kernel
+make models                      # pretrained TabICL/TabPFN/TabDPT weights + offline check
 export AGENT_NAME=<unique-name>  # every agent/human gets one
 make rehearse                    # synthetic datasets shaped like past QRT challenges
 make check                       # lint + tests + notebook check

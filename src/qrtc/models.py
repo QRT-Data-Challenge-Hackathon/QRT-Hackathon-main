@@ -2,7 +2,8 @@
 ``fit(X, y, X_val=None, y_val=None)`` and ``predict(X)`` returning task-shaped predictions
 (see qrtc.metrics for the conventions).
 
-Defaults are deliberately conservative for low signal-to-noise financial data (small learning
+``tabicl``, ``tabpfn`` and ``tabdpt`` are pretrained foundation models (qrtc.foundation; install
+with ``make models``). Defaults are deliberately conservative for low signal-to-noise financial data (small learning
 rate, large min_child_samples, row/column subsampling). Early stopping on the validation fold
 makes the CV score optimistic: it is off unless ``early_stopping_rounds`` is passed.
 """
@@ -17,6 +18,8 @@ from sklearn.compose import make_column_selector, make_column_transformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+
+from qrtc import foundation
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "lgbm": dict(n_estimators=500, learning_rate=0.03, num_leaves=31, min_child_samples=100,
@@ -50,9 +53,12 @@ PRESETS: dict[str, tuple[str, dict[str, Any]]] = {
 }
 
 SUPPORTED: dict[str, frozenset[str]] = {
-    "binary": frozenset({"lgbm", "xgb", "catboost", "logreg", "extratrees", "rf", "hgb"}),
-    "multiclass": frozenset({"lgbm", "xgb", "catboost", "logreg", "extratrees", "rf", "hgb"}),
-    "regression": frozenset({"lgbm", "xgb", "catboost", "ridge", "extratrees", "rf", "hgb"}),
+    "binary": frozenset({"lgbm", "xgb", "catboost", "logreg", "extratrees", "rf", "hgb"})
+    | foundation.NAMES,
+    "multiclass": frozenset({"lgbm", "xgb", "catboost", "logreg", "extratrees", "rf", "hgb"})
+    | foundation.NAMES,
+    "regression": frozenset({"lgbm", "xgb", "catboost", "ridge", "extratrees", "rf", "hgb"})
+    | foundation.NAMES,
     "survival": frozenset({"xgb", "coxnet", "coxph", "rsf", "gbsa"}),
 }
 
@@ -139,6 +145,8 @@ def _survival_target(name: str, y: np.ndarray):
 
 
 def _estimator(name: str, task: str, p: dict[str, Any], seed: int) -> Any:
+    if name in foundation.NAMES:  # pretrained in-context learners (optional extra "fm")
+        return foundation.ICLEstimator(name, task, p, seed)
     clf = task in ("binary", "multiclass")
     if name == "lgbm":
         import lightgbm as lgb

@@ -24,6 +24,8 @@ the same style.**
 
 - [ ] Every laptop: `git clone`, `make setup`, `export AGENT_NAME=…`, `make rehearse`,
       `make check` green, `QRTC_CONFIG=configs/rehearsal/allocation.toml uv run qrtc baseline`.
+- [ ] Every laptop: `make models` (torch + TabICL/TabPFN/TabDPT weights, ends with "all models
+      work offline"); see [MODELS.md](MODELS.md).
 - [ ] Every laptop: open `notebooks/00_quickstart.ipynb` with kernel *Python (qrtc)*, run all.
 - [ ] Each person practises once: `scripts/agent.sh start exp test-run --claim "practice"`,
       commit, push, PR, `scripts/safe_merge.sh <n>` (on a throwaway docs change), `finish`.
@@ -49,6 +51,9 @@ the same style.**
 9. **How do we submit** (web form, Kaggle, API)? Who logs in, one account per team? Is a
    submission that fails validation counted? → fill `[upload]` (backend, url/slug,
    `max_total`, `max_per_day`, `reserve_final = 2`, ONE uploader) in the spec PR.
+10. **Pretrained models** allowed? (TabICL/TabPFN were pretrained on synthetic tables only,
+    TabDPT on public real tables; TabPFN-3.5 has a non-commercial licence.) Default: only
+    `tabicl`/`tabpfn` v2 if the answer is unclear; never TabPFN-3.5 without a clear yes.
 
 ## 4. The clock (contest ≈ 18:20–21:20; anchor start to data release, end to the deadline)
 
@@ -78,7 +83,10 @@ baseline or the freeze.
   target and threshold vs classify; rank target for rank metrics; domain encodings
   (football: per-position aggregates, goal-difference proxy; survival: clinical risk score).
 - **C — model diversity:** `lgbm_shallow`, `catboost_shallow`, `xgb_shallow`, logreg/ridge on
-  ranks, 3 seeds each → saved runs for the blend.
+  ranks, 3 seeds each → saved runs for the blend. Pretrained in-context models (if §3 Q10
+  allows): `tabicl`, `tabpfn`, `tabdpt`, one run each, early; cap large panels with
+  `--params '{"max_rows": 20000, "n_bags": 2}'` ([MODELS.md](MODELS.md)). One such job per
+  laptop at a time (they use the GPU).
 - **D — Validator audit:** leak flags, `eda.lag_chain_links`, adversarial AUC, test-like CV
   subset, review every claimed gain.
 
@@ -95,6 +103,11 @@ splits, save the run, and report CV mean ± std vs run `<baseline id>`. Do not m
 | Multiclass (`football`) | `stratified` | `logreg`, `lgbm` | domain aggregates; draws are rarely predicted | argmax; `prior_adjust` if test prior differs |
 | Survival, C-index (`survival`) | `group` by centre/hospital | `coxph` / `coxnet` | `rsf`, `gbsa`, `xgb` (cox); clinical risk features | output `risk_score` (higher = earlier death) |
 | Weighted accuracy (|y|-weighted, #44) | `date_blocks` | regress the real target | `weight_col = "abs_target"` | sign |
+
+Small tables (≤ ~50k training rows): run one pretrained model (`tabdpt` is fastest, or
+`tabicl`) next to `logreg`/`ridge` in the first hour; it needs no tuning. On our synthetic
+rehearsals it tied the linear models and beat default LightGBM by ~4 points, but never beat
+logreg/ridge ([MODELS.md](MODELS.md)): decide by CV like everything else.
 
 What did **not** pay in QRT write-ups: PCA, autoencoders, deep nets, per-entity models, heavy
 stacking, Optuna tuning, de-meaning the target per day (throws away market drift).

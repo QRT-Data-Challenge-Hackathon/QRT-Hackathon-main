@@ -29,7 +29,8 @@ cmd_start() {
   [ -e "$dir" ] && die "$dir already exists"
   git -C "$ROOT" fetch -q origin main
   git -C "$ROOT" worktree add -q --no-track -b "$branch" "$dir" origin/main
-  (cd "$dir" && uv sync -q --all-groups)
+  local fm="--extra fm"; [ -z "${QRTC_NO_FM:-}" ] || fm=""   # QRTC_NO_FM=1: skip torch models
+  (cd "$dir" && uv sync -q --all-groups $fm)
   if [ -n "$claim" ]; then
     git -C "$dir" commit -q --allow-empty -m "chore: claim $topic" -m "$claim"
     git -C "$dir" push -q -u origin "$branch"
