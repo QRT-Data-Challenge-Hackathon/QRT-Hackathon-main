@@ -51,7 +51,7 @@ hidden_y_test = ""
 [upload]
 backend = "kaggle"
 uploaders = ["dmr-claude-0"]    # the ONLY Submitter (session "agent 1 submitter")
-max_total = 0
+max_total = 10                # Kaggle: 10 submissions per TEAM in total (organisers)
 max_per_day = 10              # Kaggle: 10 per day (it reported 9 left after the first upload)
 reserve_final = 2
 public_fraction = 0.5
