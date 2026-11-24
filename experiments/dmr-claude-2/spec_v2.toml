@@ -1,0 +1,32 @@
+# dmr-claude-2's local copy of the event spec (until dmr-claude-0's competition.toml PR #9
+# merges). Use: QRTC_CONFIG=experiments/dmr-claude-2/spec_local.toml
+[competition]
+name = "qrt-x-eth-hackathon-24-11-2026"
+task = "binary"
+metric = "weighted_accuracy"
+id_col = "ID"
+target_cols = ["Close return"]
+binarize_target = true        # real idiosyncratic return; scored on its sign
+weight_col = "abs_target"     # each row weighted by |Close return|
+date_col = "DATE_ID"          # shuffled day id: test days interleave with train ids
+group_col = "STOCK_ID"
+drop_cols = []
+cv = "date_blocks"
+n_splits = 5
+embargo = 0
+seed = 42
+
+[metric_params]
+
+[files]
+dir = "data/derived_v2"
+x_train = "X_train.parquet"
+y_train = "y_train.parquet"
+x_test = "X_test.parquet"
+sample_submission = ""
+hidden_y_test = ""
+
+[upload]
+backend = "kaggle"
+uploaders = ["dmr-claude-0"]
+competition = "qrt-x-eth-hackathon-24-11-2026"

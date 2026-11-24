@@ -1,0 +1,61 @@
+# Official competition.toml (PR #9) with dmr-claude-2's feature tables (data/derived,
+# built by experiments/dmr-claude-2/build.py). Same CV, metric, signed labels.
+# competition.toml — THE single source of truth for the event's problem.
+#
+# At the event (first 15 min): copy the matching file from configs/rehearsal/ or edit this one,
+# point [files] at data/raw/, set id/target/date columns, task and metric, then open ONE PR
+# "chore: set competition spec" and merge it fast. Every agent pulls main afterwards.
+# Until then it points at the synthetic stock_sign rehearsal (run `make rehearse` first).
+#
+# task:   binary | multiclass | regression | survival
+# metric: accuracy weighted_accuracy balanced_accuracy f1 auc logloss rmse mae r2 zero_mean_r2
+#         spearman pearson mean_spearman mean_pearson cindex ipcw_cindex
+# cv:     auto | date_blocks | time | group | stratified | kfold   (see src/qrtc/cv.py)
+
+[competition]
+name = "qrt-x-eth-hackathon-24-11-2026"   # Kaggle: predict the last 30 minutes (2-hour event)
+task = "binary"
+metric = "weighted_accuracy"
+id_col = "ID"
+target_cols = ["Close return"]   # cutoff->close return minus its DATE_ID x COUNTRY mean
+date_col = "DATE_ID"          # SHUFFLED day id: test days come later, but ids interleave
+group_col = "STOCK_ID"        # 386 stocks, the same in train and test
+weight_col = "abs_target"     # metric weight = |Close return| (bigger moves count more)
+binarize_target = true        # Kaggle scores only the sign; an exact 0 is always wrong
+signed_labels = true          # so submissions hold +1/-1, never 0/1
+submission_cols = []          # output columns if different from target_cols (e.g. ["risk_score"])
+drop_cols = ["DATE_ID"]       # shuffled id: not a feature (still used for the CV groups)
+cv = "date_blocks"            # groups of whole days (ids are shuffled, so blocks are random days)
+n_splits = 5
+embargo = 0                   # dates dropped either side of a validation block
+seed = 42
+
+[metric_params]               # extra kwargs for the metric, e.g. tau = 7.0 for ipcw_cindex
+
+[files]                       # relative to the main checkout (shared by all worktrees)
+dir = "data/derived_v2rg"   # `kaggle competitions download`, unzipped
+x_train = "X_train.parquet"   # built by scripts/prep_last30.py (flat features)
+y_train = "y_train.parquet"       # "" if the target is inside x_train
+x_test = "X_submit.parquet"   # ALL 219,157 ids: Kaggle wants train ids too in every file
+sample_submission = ""
+hidden_y_test = ""
+
+# [upload] — who may upload, and where. Fill it at the briefing (docs/PLAYBOOK.md §3):
+#   backend  local   rehearsal only: scores against hidden_y_test, public/private split
+#            browser web form: `qrtc upload` reserves + logs, the uploader agent (Claude in
+#                    Chrome, logged in by a human beforehand) uploads the printed file, then
+#                    `qrtc upload-confirm <id> --score <public>`
+#            kaggle  `kaggle competitions submit` (set competition = "<slug>")
+#            http    multipart POST to url; secrets via headers_env = {"Authorization" = "ENV_VAR"}
+#   uploaders: AGENT_NAMEs allowed to upload — at the event exactly ONE (the Submitter)
+#   max_total / max_per_day: the platform's limits (0 = none); reserve_final: slots that only
+#   `--final` uploads may use (set 2 at the event: the two finals)
+[upload]
+backend = "kaggle"
+uploaders = ["dmr-claude-0"]    # the ONLY Submitter (session "agent 1 submitter")
+max_total = 0
+max_per_day = 5               # assumed Kaggle default; raise it if the Submit page shows more
+reserve_final = 2
+public_fraction = 0.5
+url = ""                      # browser: submission page; http: POST endpoint (https only)
+competition = "qrt-x-eth-hackathon-24-11-2026"   # kaggle: competition slug

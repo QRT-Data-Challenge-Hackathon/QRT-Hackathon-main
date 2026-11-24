@@ -1,0 +1,27 @@
+{
+  "run_id": "1124-190146_dmr-claude-2_median",
+  "slug": "median",
+  "agent": "dmr-claude-2",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5422538735392375,
+  "cv_std": 0.005541123740812478,
+  "fold_scores": [
+    0.5469615030108476,
+    0.5446297941733801,
+    0.534643532497914,
+    0.536701022694189,
+    0.5483335153198569
+  ],
+  "model": "post-median",
+  "params": {
+    "run": "1124-185327_dmr-claude-2_ridge-v1-reg"
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "2a4c073",
+  "branch": "exp/dmr-claude-2/data-models",
+  "created": "2026-11-24T19:01:46",
+  "notes": "median within DATE_ID x COUNTRY of 1124-185327_dmr-claude-2_ridge-v1-reg"
+}
