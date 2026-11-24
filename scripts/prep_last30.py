@@ -35,7 +35,7 @@ def price_matrix(series: pd.Series) -> tuple[np.ndarray, np.ndarray]:
     lengths = np.array([len(a) for a in arrays])
     width = lengths.max()
     out = np.full((len(arrays), width), np.nan)
-    for row, (arr, n) in enumerate(zip(arrays, lengths)):
+    for row, (arr, n) in enumerate(zip(arrays, lengths, strict=True)):
         out[row, width - n:] = arr
     filled = pd.DataFrame(out).ffill(axis=1).to_numpy()
     pad = np.arange(width)[None, :] < (width - lengths)[:, None]
