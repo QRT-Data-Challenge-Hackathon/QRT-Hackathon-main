@@ -69,6 +69,7 @@ class Spec:
     group_col: str | None = None
     weight_col: str | None = None          # "abs_target" = |raw target| (QRT 2021 metric)
     binarize_target: bool = False          # real-valued target scored on its sign (QRT 2026)
+    signed_labels: bool = False            # write binary labels as +1/-1 (sign-scored, 0 = wrong)
     x_prefixes: tuple[str, ...] = ()       # prefixes when x_train/x_test are lists of files
     submission_cols: tuple[str, ...] = ()
     drop_cols: tuple[str, ...] = ()
@@ -114,6 +115,8 @@ def _validate(spec: Spec) -> Spec:
         raise SpecError("n_splits must be >= 2")
     if spec.binarize_target and spec.task != "binary":
         raise SpecError("binarize_target requires task = 'binary'")
+    if spec.signed_labels and spec.task != "binary":
+        raise SpecError("signed_labels requires task = 'binary'")
     if spec.x_prefixes and isinstance(spec.x_train, str):
         raise SpecError("x_prefixes needs x_train/x_test given as lists of files")
     from qrtc.metrics import METRICS  # local import: metrics imports nothing from config
@@ -169,6 +172,7 @@ def load_spec(path: str | Path | None = None) -> Spec:
         group_col=_opt(comp.get("group_col")),
         weight_col=_opt(comp.get("weight_col")),
         binarize_target=bool(comp.get("binarize_target", False)),
+        signed_labels=bool(comp.get("signed_labels", False)),
         x_prefixes=tuple(files.get("x_prefixes", ())),
         submission_cols=tuple(comp.get("submission_cols", ())),
         drop_cols=tuple(comp.get("drop_cols", ())),
