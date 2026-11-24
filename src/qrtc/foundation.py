@@ -3,15 +3,15 @@
 They learn in context: ``fit`` stores the training rows and ``predict`` runs one forward pass
 over training and test rows, with no gradient training and no tuning. On small and medium tables
 (up to ~50k rows, the size of most QRT challenges) they often beat tuned GBMs, and their errors
-differ from GBM errors, so they also help blends. Install them and download the weights before
-the event with ``make models``; after that they run offline on the Apple-Silicon GPU (MPS).
+differ from GBM errors, so they also help blends. ``make models`` installs them and downloads
+the weights; after that they run offline on the Apple-Silicon GPU (MPS).
 They run in a separate worker process (qrtc.fm_worker) because torch and LightGBM crash when
 loaded into one process on macOS; ``QRTC_FM_INPROCESS=1`` turns that off.
 
 Weight licences: TabICL BSD-3-Clause, TabDPT Apache-2.0, TabPFN v2 Prior Labs License
 (Apache-2.0 plus attribution: write "built with TabPFN"). TabPFN 2.5 and later
 (``version="v3_5"`` etc.) are non-commercial and need a one-time licence acceptance
-(``TABPFN_TOKEN``), so check the event rules before using them.
+(``TABPFN_TOKEN``), so check a competition's rules before using them.
 
 Params (``--params``) besides the backend's own constructor arguments:
   max_rows  context cap: larger training sets are subsampled (stratified for classification)

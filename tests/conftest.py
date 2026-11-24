@@ -1,4 +1,4 @@
-"""Shared fixtures: synthetic rehearsal data and specs in a temp dir, isolated run dirs."""
+"""Shared fixtures: synthetic datasets and their specs in a temp dir, isolated run dirs."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 from qrtc import config, synthetic
 
-REHEARSAL = Path(__file__).resolve().parents[1] / "configs" / "rehearsal"
+SPECS = Path(__file__).resolve().parent / "fixtures" / "specs"
 
 
 @pytest.fixture(autouse=True)
@@ -30,10 +30,10 @@ def data_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture
 def spec_for(data_root: Path, tmp_path: Path):
-    """Load a rehearsal config with its data dir pointed at the temp synthetic data."""
+    """Load a fixture spec with its data dir pointed at the temp synthetic data."""
 
     def _load(kind: str) -> config.Spec:
-        text = (REHEARSAL / f"{kind}.toml").read_text()
+        text = (SPECS / f"{kind}.toml").read_text()
         text = text.replace(f'dir = "data/synthetic/{kind}"', f'dir = "{data_root / kind}"')
         path = tmp_path / f"{kind}.toml"
         path.write_text(text)

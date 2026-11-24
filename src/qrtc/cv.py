@@ -1,7 +1,7 @@
 """Cross-validation splits that mirror how the organisers split train and test.
 
 The single most important modelling decision in a QRT-style challenge is a CV that tracks the
-private leaderboard. Rules of thumb (see docs/PLAYBOOK.md):
+private leaderboard. Rules of thumb:
   * test dates disjoint from train dates, interleaved  -> ``date_blocks`` (contiguous date
     blocks, optional embargo of ``embargo`` dates on each side of the validation block)
   * test dates strictly after train dates             -> ``time`` (expanding window)

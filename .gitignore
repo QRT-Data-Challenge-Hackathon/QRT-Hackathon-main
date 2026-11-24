@@ -13,7 +13,7 @@ htmlcov/
 .ipynb_checkpoints/
 notebooks/scratch/
 
-# Data: never commit organiser-provided data (competition rules + repo size)
+# Data: competition data is never committed (competition rules + repo size)
 data/*
 !data/README.md
 *.parquet
@@ -23,19 +23,14 @@ data/*
 *.joblib
 catboost_info/
 
-# Heavy run artifacts stay local; small metadata is committed under results/registry/
+# Heavy run artifacts stay local; small metadata lives in results/registry/
 runs/
 submissions/*.csv
 submissions/*.zip
-submissions/ledger.jsonl
-submissions/.upload.lock
-
-# Agent worktrees (one per agent; see AGENTS.md)
-.worktrees/
 
 # Local tooling
+.worktrees/
 .DS_Store
 .idea/
 .vscode/
-.claude/settings.local.json
 .env

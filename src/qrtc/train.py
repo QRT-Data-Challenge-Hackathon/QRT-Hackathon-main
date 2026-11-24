@@ -1,7 +1,7 @@
 """The CV loop: out-of-fold predictions, fold-averaged test predictions, per-fold scores.
 
-Every experiment should go through :func:`run_cv` so that scores are comparable across agents
-(same splits, same metric) and so that OOF predictions can be blended later.
+Every experiment goes through :func:`run_cv`, so scores are comparable across experiments
+(same splits, same metric) and OOF predictions can be blended later.
 """
 
 from __future__ import annotations

@@ -1,0 +1,26 @@
+{
+  "run_id": "1124-190750_blend-mean",
+  "slug": "blend-mean",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5426980289288924,
+  "cv_std": 0.0,
+  "fold_scores": [
+    0.5426980289288924
+  ],
+  "model": "blend-mean",
+  "params": {
+    "runs": [
+      "1124-190437_ridge-v1-clip0-02-reg"
+    ],
+    "w": [
+      1.0
+    ]
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "2a4c073",
+  "created": "2026-11-24T19:07:50",
+  "notes": "1124-190437_ridge-v1-clip0-02-reg"
+}

@@ -1,21 +1,19 @@
-# QRT Data Challenge toolkit. Run `make help`.
-KIND ?= stock_sign
+# Run `make help` for the targets.
 MODEL ?= lgbm
-KINDS := stock_sign allocation electricity football survival
 
-.PHONY: help setup models check lint test nbcheck nbstrip synth rehearse eda baseline lb lab status clean-runs
+.PHONY: help setup models check lint test nbcheck nbstrip prep features eda baseline ridge lb lab clean-runs
 
 help:            ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
 
-setup:           ## deps, git guard hooks, Jupyter kernel (once per clone)
+setup:           ## dependencies, git hooks, Jupyter kernel (once per clone)
 	@scripts/setup.sh
 
-models:          ## pretrained TabICL/TabPFN/TabDPT: install, download weights, offline check
+models:          ## optional pretrained TabICL/TabPFN/TabDPT: install, download weights, offline check
 	uv sync --all-groups --extra fm
 	uv run python scripts/prefetch_models.py
 
-check: lint test nbcheck  ## everything CI runs; must be green before a PR
+check: lint test nbcheck  ## what CI runs
 
 lint:            ## ruff
 	uv run ruff check .
@@ -29,26 +27,26 @@ nbcheck:         ## fail if any notebook has outputs
 nbstrip:         ## strip outputs from all notebooks
 	uv run python scripts/check_notebooks.py --fix
 
-synth:           ## one rehearsal dataset: make synth KIND=allocation
-	uv run qrtc synth $(KIND)
+prep:            ## flat baseline features (data/raw/.../prep/)
+	uv run python scripts/prep_last30.py
 
-rehearse:        ## all rehearsal datasets
-	@for k in $(KINDS); do uv run qrtc synth $$k; done
+features:        ## intraday feature tables (data/derived/)
+	uv run python experiments/intraday_ridge/build.py
 
 eda:             ## EDA on competition.toml (or QRTC_CONFIG)
 	uv run qrtc eda
 
-baseline:        ## CV baseline + run + submission: make baseline MODEL=lgbm_shallow
+baseline:        ## CV baseline + saved run + submission: make baseline MODEL=lgbm_shallow
 	uv run qrtc baseline --model $(MODEL)
 
-lb:              ## team leaderboard
+ridge:           ## the ridge model on the intraday features (needs `make features`)
+	QRTC_CONFIG=experiments/intraday_ridge/spec.toml uv run python experiments/intraday_ridge/run.py --model ridge --regress --no-fit-weight --slug ridge-v1
+
+lb:              ## every saved run, best CV first
 	uv run qrtc lb
 
 lab:             ## Jupyter Lab
 	uv run jupyter lab
-
-status:          ## worktrees and open PRs (who is doing what)
-	@scripts/agent.sh status
 
 clean-runs:      ## delete local runs/ and submissions (asks first)
 	@read -p "delete runs/ and submissions/*.csv? [y/N] " a && [ "$$a" = y ] && rm -rf runs && find submissions -name '*.csv' -delete || true

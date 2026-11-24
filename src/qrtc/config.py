@@ -1,8 +1,8 @@
-"""Competition spec: one TOML file (``competition.toml``) describes the event's problem.
+"""Competition spec: one TOML file (``competition.toml``) describes the problem.
 
-Every script, notebook and agent reads the spec through :func:`load_spec` so that the problem
+Every script, notebook and CLI command reads the spec through :func:`load_spec`, so the problem
 definition (files, id/target/date columns, task, metric, CV) lives in exactly one place.
-Override the file with the ``QRTC_CONFIG`` environment variable (used for rehearsal configs).
+``QRTC_CONFIG`` selects another spec file; ``QRTC_DATA_DIR`` swaps only its data directory.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _shared_root() -> Path:
     """Main checkout shared by all git worktrees ($QRTC_SHARED_DIR overrides).
 
-    Gitignored state (data/, runs/, submissions/) lives here so that every agent worktree on
-    this machine reads the same data and can blend every other agent's predictions."""
+    Gitignored state (data/, runs/, submissions/) lives here, so parallel worktrees of the repo
+    read the same data and can blend each other's saved predictions."""
     env = os.environ.get("QRTC_SHARED_DIR")
     if env:
         return Path(env).expanduser().resolve()
@@ -36,11 +36,11 @@ def _shared_root() -> Path:
 
 SHARED_ROOT = _shared_root()
 DEFAULT_CONFIG = REPO_ROOT / "competition.toml"
-RUNS_DIR = SHARED_ROOT / "runs"                     # local, gitignored, shared by worktrees
+RUNS_DIR = SHARED_ROOT / "runs"                     # local, gitignored
 SHARED_LB_DIR = RUNS_DIR / "_lb"                    # public LB scores seen on this machine
 SUBMISSIONS_DIR = SHARED_ROOT / "submissions"       # local, gitignored
-REGISTRY_DIR = REPO_ROOT / "results" / "registry"   # committed via PRs (cross-machine)
-LB_DIR = REPO_ROOT / "results" / "lb"               # committed via PRs (cross-machine)
+REGISTRY_DIR = REPO_ROOT / "results" / "registry"   # committed run metadata (small JSON)
+LB_DIR = REPO_ROOT / "results" / "lb"               # committed public scores
 
 TASKS = frozenset({"binary", "multiclass", "regression", "survival"})
 CV_STRATEGIES = frozenset({"auto", "kfold", "stratified", "group", "date_blocks", "time"})
@@ -129,8 +129,8 @@ def _validate(spec: Spec) -> Spec:
 def resolve_shared(path: str | Path) -> Path:
     """``path`` if it exists, else the same relative path inside the main checkout.
 
-    Agents work in worktrees but ``submissions/``, ``runs/`` and ``data/`` live in the main
-    checkout, so ``submissions/x.csv`` must work from any worktree."""
+    ``submissions/``, ``runs/`` and ``data/`` live in the main checkout, so a path such as
+    ``submissions/x.csv`` works from any worktree."""
     given = Path(path).expanduser()
     if given.is_absolute() or given.exists():
         return given.resolve()
@@ -155,7 +155,7 @@ def load_spec(path: str | Path | None = None) -> Spec:
     missing += [f"files.{k}" for k in ("dir", "x_train", "x_test") if k not in files]
     if missing:
         raise SpecError(f"{cfg_path.name} is missing: {missing}")
-    data_dir = Path(files["dir"])
+    data_dir = Path(os.environ.get("QRTC_DATA_DIR") or files["dir"])
     spec = Spec(
         name=comp.get("name", cfg_path.stem),
         task=comp["task"],

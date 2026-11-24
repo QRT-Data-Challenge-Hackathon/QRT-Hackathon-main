@@ -1,4 +1,4 @@
-"""Build, validate and write submission files. A wrong file wastes a submission slot, so
+"""Build, validate and write submission files. A malformed file wastes a submission, so
 ``write_submission`` always validates first and refuses to write an invalid file.
 """
 
@@ -94,3 +94,34 @@ def write_submission(sub: pd.DataFrame, spec: Spec, test_ids: np.ndarray, tag: s
         path = directory / f"{tag}_{datetime.now():%H%M%S}.csv"
     sub.to_csv(path, index=False)
     return path
+
+
+def hidden_score(spec: Spec, sub: pd.DataFrame, ids: np.ndarray | None = None) -> float:
+    """Score a submission against hidden test labels (synthetic datasets; optionally ``ids``)."""
+    from qrtc import io
+    from qrtc.metrics import get_metric
+
+    hidden = spec.path(spec.hidden_y_test)
+    if not hidden or not hidden.exists():
+        raise SubmissionError("no hidden_y_test configured (only the synthetic datasets have one)")
+    truth = pd.read_csv(hidden)
+    if ids is not None:
+        truth = truth[truth[spec.id_col].isin(ids)]
+    sub = sub.rename(columns={c: f"{c}_pred" for c in spec.out_cols})
+    merged = truth.merge(sub, on=spec.id_col, validate="one_to_one")
+    pred_cols = [f"{c}_pred" for c in spec.out_cols]
+    truth_y = merged[list(spec.target_cols)]
+    if spec.binarize_target:
+        truth_y = (truth_y > 0).astype(int)
+    classes = io._class_labels(truth_y, spec)
+    y_true = io.encode_target(truth_y, classes)
+    pred = merged[pred_cols].to_numpy()
+    pred = pred[:, 0] if pred.shape[1] == 1 else pred
+    if spec.task in ("binary", "multiclass") and pred.ndim == 1 and pred.dtype == object:
+        pred = io.encode_target(merged[pred_cols], classes)
+    groups = None
+    if spec.date_col:
+        test = io.read_features(spec, spec.x_test)[[spec.id_col, spec.date_col]]
+        groups = merged[[spec.id_col]].merge(test, on=spec.id_col)[spec.date_col].to_numpy()
+    metric = get_metric(spec.metric)
+    return float(metric(y_true, pred, groups=groups, **dict(spec.metric_params)))
