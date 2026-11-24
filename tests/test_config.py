@@ -7,8 +7,8 @@ from qrtc import config
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("path", sorted((ROOT / "configs" / "rehearsal").glob("*.toml")))
-def test_rehearsal_configs_load(path):
+@pytest.mark.parametrize("path", sorted((ROOT / "tests" / "fixtures" / "specs").glob("*.toml")))
+def test_fixture_specs_load(path):
     spec = config.load_spec(path)
     assert spec.task in config.TASKS
     assert spec.target_cols

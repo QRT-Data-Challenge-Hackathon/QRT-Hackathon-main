@@ -1,4 +1,4 @@
-"""CLI smoke tests: every command on a rehearsal dataset, isolated from the real repo dirs."""
+"""CLI smoke tests: every command on a synthetic dataset, isolated from the real repo dirs."""
 
 import pytest
 
@@ -30,11 +30,6 @@ def test_baseline_lb_blend_and_scoring(stock_cfg, capsys):
 def test_eda_runs(stock_cfg, capsys):
     assert cli.main(["eda"]) == 0
     assert "leakage flags" in capsys.readouterr().out
-
-
-def test_synth_writes_files(tmp_path):
-    assert cli.main(["synth", "football", "--out", str(tmp_path / "fb")]) == 0
-    assert (tmp_path / "fb" / "X_train.csv").exists()
 
 
 def test_bad_config_returns_error_code(tmp_path, monkeypatch):

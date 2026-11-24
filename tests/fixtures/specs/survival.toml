@@ -1,0 +1,24 @@
+# Test fixture: spec for the synthetic 'survival' dataset (qrtc.synthetic).
+[competition]
+name = "synthetic-survival"
+task = "survival"
+metric = "ipcw_cindex"
+id_col = "ID"
+target_cols = ["OS_YEARS", "OS_STATUS"]
+date_col = ""
+group_col = "CENTER"
+submission_cols = ["risk_score"]
+cv = "auto"
+n_splits = 5
+seed = 42
+
+[metric_params]
+tau = 7.0
+
+[files]
+dir = "data/synthetic/survival"
+x_train = "X_train.csv"
+y_train = "y_train.csv"
+x_test = "X_test.csv"
+sample_submission = "sample_submission.csv"
+hidden_y_test = "y_test_hidden.csv"

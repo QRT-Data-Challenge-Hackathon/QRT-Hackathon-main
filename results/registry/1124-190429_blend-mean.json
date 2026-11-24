@@ -1,0 +1,30 @@
+{
+  "run_id": "1124-190429_blend-mean",
+  "slug": "blend-mean",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5417972705640569,
+  "cv_std": 0.0,
+  "fold_scores": [
+    0.5417972705640569
+  ],
+  "model": "blend-mean",
+  "params": {
+    "runs": [
+      "1124-185723_a-s-beta-idio-lgs-fw",
+      "1124-190345_a-s-beta-idio-lgs-fw-s7",
+      "1124-190408_a-s-beta-idio-lgs-fw-s13"
+    ],
+    "w": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "f6782a4",
+  "created": "2026-11-24T19:04:29",
+  "notes": "1124-185723_a-s-beta-idio-lgs-fw,1124-190345_a-s-beta-idio-lgs-fw-s7,1124-190408_a-s-beta-idio-lgs-fw-s13"
+}

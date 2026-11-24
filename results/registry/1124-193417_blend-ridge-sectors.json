@@ -1,0 +1,31 @@
+{
+  "run_id": "1124-193417_blend-ridge-sectors",
+  "slug": "blend-ridge-sectors",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5426789268632237,
+  "cv_std": 0.007302293241908262,
+  "fold_scores": [
+    0.5504284204428029,
+    0.5464944846351718,
+    0.5355229017842416,
+    0.5323788640286272,
+    0.548569963425275
+  ],
+  "model": "blend-z",
+  "params": {
+    "runs": [
+      "1124-190301_ridge-repro7-ridge-v1-reg",
+      "1124-193326_repro22-sectors"
+    ]
+  },
+  "n_features": 2,
+  "features": [
+    "1124-190301_ridge-repro7-ridge-v1-reg",
+    "1124-193326_repro22-sectors"
+  ],
+  "elapsed_s": 0.4,
+  "git_sha": "b7b2706",
+  "created": "2026-11-24T19:34:17",
+  "notes": "z-score blend"
+}

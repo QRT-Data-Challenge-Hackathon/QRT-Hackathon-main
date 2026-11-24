@@ -1,0 +1,25 @@
+{
+  "run_id": "1124-194717_demean",
+  "slug": "demean",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5424428255720861,
+  "cv_std": 0.004302779666393761,
+  "fold_scores": [
+    0.5460658820320256,
+    0.5487821912677339,
+    0.5384974135070767,
+    0.5411056952865109,
+    0.5377629457670837
+  ],
+  "model": "post-demean",
+  "params": {
+    "run": "1124-194716_ridge-p2-v1clip-reg"
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "ac454a3",
+  "created": "2026-11-24T19:47:17",
+  "notes": "demean within DATE_ID x COUNTRY of 1124-194716_ridge-p2-v1clip-reg"
+}

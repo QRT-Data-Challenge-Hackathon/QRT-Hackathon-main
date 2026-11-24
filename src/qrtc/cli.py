@@ -1,16 +1,12 @@
 """Command line entry point: ``uv run qrtc <command>``.
 
-  synth <kind>               write a rehearsal dataset (stock_sign, allocation, electricity, ...)
   eda                        overview, split structure, target, signal scan, leakage flags
-  baseline [--model lgbm]    CV a model on raw features, save the run, write a submission
-  lb                         team leaderboard (all runs: CV, public LB, agent, branch)
+  baseline [--model lgbm]    CV a model on the spec's features, save the run, write a submission
+  lb                         every saved run: CV mean/std, public LB, model, notes
   blend RUN [RUN ...]        blend runs' OOF/test preds (mean | rank | hill), save + submit
   record-lb RUN SCORE        store the public leaderboard score of a submitted run
   check-sub PATH             validate a submission file against the spec
-  score-hidden PATH          score a submission against y_test_hidden (rehearsal only)
-  upload PATH [--final]      designated uploader only: validate, budget-check, log, upload
-  upload-confirm ID          record a browser/kaggle upload's outcome (--score S | --failed R)
-  uploads [--reveal]         ledger of uploads + remaining budget (--reveal: rehearsal private)
+  score-hidden PATH          score a submission against hidden test labels (synthetic data)
 """
 
 from __future__ import annotations
@@ -18,13 +14,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from qrtc import config, eda, ensemble, io, platforms, submit, synthetic, tracking
-from qrtc import upload as uploads
+from qrtc import config, eda, ensemble, io, submit, tracking
 from qrtc.cv import detect_strategy, make_splits
 from qrtc.features import auto_categoricals, to_category
 from qrtc.metrics import get_metric
@@ -37,13 +31,6 @@ def _prepared(spec: config.Spec) -> tuple[io.Dataset, pd.DataFrame, pd.DataFrame
     cats = [c for c in auto_categoricals(ds.train[feats]) if c in feats]
     X, X_test = to_category(ds.train[feats], ds.test[feats], cats)
     return ds, X, X_test
-
-
-def cmd_synth(args: argparse.Namespace) -> int:
-    out = Path(args.out) if args.out else config.SHARED_ROOT / "data" / "synthetic" / args.kind
-    synthetic.generate(args.kind, out, seed=args.seed)
-    print(f"wrote {out}; use it with: QRTC_CONFIG=configs/rehearsal/{args.kind}.toml")
-    return 0
 
 
 def cmd_eda(args: argparse.Namespace) -> int:
@@ -151,43 +138,10 @@ def cmd_score_hidden(args: argparse.Namespace) -> int:
     spec = config.load_spec()
     hidden = spec.path(spec.hidden_y_test)
     if not hidden or not hidden.exists():
-        print("no hidden_y_test configured (only rehearsal datasets have one)")
+        print("no hidden_y_test configured (only the synthetic datasets have one)")
         return 1
-    score = platforms.hidden_score(spec, pd.read_csv(config.resolve_shared(args.path)))
+    score = submit.hidden_score(spec, pd.read_csv(config.resolve_shared(args.path)))
     print(f"hidden {spec.metric} = {score:.5f}")
-    return 0
-
-
-def _upload_line(rec: dict) -> str:
-    public = rec.get("public")
-    score = f"public={public:.5f}" if isinstance(public, float) else "public=?"
-    final = " FINAL" if rec.get("final") else ""
-    return (f"{rec['upload_id']} {rec['status']}{final} {score} backend={rec['backend']} "
-            f"run={rec.get('run_id') or '-'} file={Path(rec['path']).name}")
-
-
-def cmd_upload(args: argparse.Namespace) -> int:
-    rec = uploads.upload_file(args.path, args.message, args.final, args.run, args.dry_run,
-                              args.allow_duplicate)
-    print(_upload_line(rec))
-    if rec.get("detail"):
-        print(rec["detail"])
-    return 0
-
-
-def cmd_upload_confirm(args: argparse.Namespace) -> int:
-    print(_upload_line(uploads.confirm(args.upload_id, args.score, args.failed)))
-    return 0
-
-
-def cmd_uploads(args: argparse.Namespace) -> int:
-    spec, cfg = config.load_spec(), platforms.load_upload_config()
-    table = uploads.upload_table(spec.name, reveal=args.reveal)
-    print(table.to_string() if not table.empty else "no uploads yet")
-    state = uploads.budget(uploads.read_ledger(), cfg, spec.name)
-    left = "unlimited" if state.left is None else state.left
-    print(f"\nbackend={cfg.backend} uploaders={list(cfg.uploaders)} used={state.used} "
-          f"(today {state.used_today}) left={left} kept_for_finals={cfg.reserve_final}")
     return 0
 
 
@@ -202,8 +156,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qrtc", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    _add(sub, "synth", cmd_synth, (("kind",), {"choices": sorted(synthetic.GENERATORS)}),
-         (("--out",), {}), (("--seed",), {"type": int, "default": 0}))
     _add(sub, "eda", cmd_eda)
     _add(sub, "baseline", cmd_baseline, (("--model",), {"default": "lgbm"}), (("--cv",), {}),
          (("--params",), {"help": "JSON dict of model params"}))
@@ -215,16 +167,6 @@ def build_parser() -> argparse.ArgumentParser:
          (("--note",), {"default": ""}))
     _add(sub, "check-sub", cmd_check_sub, (("path",), {}))
     _add(sub, "score-hidden", cmd_score_hidden, (("path",), {}))
-    _add(sub, "upload", cmd_upload, (("path",), {}), (("-m", "--message"), {"default": ""}),
-         (("--final",), {"action": "store_true", "help": "may use slots kept for finals"}),
-         (("--run",), {"help": "run id (default: from the file name)"}),
-         (("--dry-run",), {"action": "store_true", "help": "check everything, upload nothing"}),
-         (("--allow-duplicate",), {"action": "store_true"}))
-    _add(sub, "upload-confirm", cmd_upload_confirm, (("upload_id",), {}),
-         (("--score",), {"type": float, "help": "public score shown by the platform"}),
-         (("--failed",), {"metavar": "REASON", "help": "upload did not go through"}))
-    _add(sub, "uploads", cmd_uploads,
-         (("--reveal",), {"action": "store_true", "help": "show rehearsal private scores"}))
     return parser
 
 

@@ -1,10 +1,8 @@
-"""Run registry shared by all agents.
+"""Run registry: every experiment's predictions and metadata, keyed by a unique ``run_id``.
 
-Each experiment gets a unique ``run_id`` (timestamp + agent + slug), so parallel agents never
-write the same file:
-  * ``<shared>/runs/<run_id>/{preds.npz,meta.json}``  local, gitignored, visible to every
-    worktree on this machine (``<shared>`` = main checkout, see qrtc.config.SHARED_ROOT)
-  * ``results/registry/<run_id>.json``   same metadata, committed in your PR (cross-machine)
+``run_id`` = timestamp + slug, so parallel experiments never write the same file:
+  * ``<shared>/runs/<run_id>/{preds.npz,meta.json}``  local, gitignored (OOF + test preds)
+  * ``results/registry/<run_id>.json``   the same metadata, small enough to commit
   * ``results/lb/<run_id>.json`` + ``<shared>/runs/_lb/``  public-leaderboard score
 ``leaderboard()`` unions all of these into one table sorted by CV score.
 """
@@ -12,7 +10,6 @@ write the same file:
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 from datetime import datetime
@@ -37,15 +34,9 @@ def _git(*args: str) -> str:
         return ""
 
 
-def agent_name() -> str:
-    """Who produced the run: $AGENT_NAME, else the git user name, else 'anon'."""
-    raw = os.environ.get("AGENT_NAME") or _git("config", "user.name") or "anon"
-    return re.sub(r"[^A-Za-z0-9]+", "-", raw).strip("-").lower() or "anon"
-
-
 def make_run_id(slug: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9]+", "-", slug).strip("-").lower()[:40] or "run"
-    return f"{datetime.now():%m%d-%H%M%S}_{agent_name()}_{clean}"
+    return f"{datetime.now():%m%d-%H%M%S}_{clean}"
 
 
 def save_run(result: CVResult, spec: Spec, slug: str, train_ids: np.ndarray,
@@ -57,21 +48,19 @@ def save_run(result: CVResult, spec: Spec, slug: str, train_ids: np.ndarray,
     np.savez_compressed(run_dir / "preds.npz", oof=result.oof, test=result.test_pred,
                         train_ids=np.asarray(train_ids), test_ids=np.asarray(test_ids))
     meta = {
-        "run_id": run_id, "slug": slug, "agent": agent_name(), "competition": spec.name,
+        "run_id": run_id, "slug": slug, "competition": spec.name,
         "metric": result.metric, "cv": result.score, "cv_std": result.score_std,
         "fold_scores": list(result.fold_scores), "model": result.model,
         "params": result.params, "n_features": len(result.features),
         "features": list(result.features)[:300], "elapsed_s": round(result.elapsed_s, 1),
         "git_sha": _git("rev-parse", "--short", "HEAD"),
-        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
         "created": datetime.now().isoformat(timespec="seconds"), "notes": notes,
         **(extra or {}),
     }
     text = json.dumps(meta, indent=2, default=str)
     (run_dir / "meta.json").write_text(text)
-    if not spec.name.startswith("rehearsal"):  # rehearsal runs stay local
-        config.REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-        (config.REGISTRY_DIR / f"{run_id}.json").write_text(text)
+    config.REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+    (config.REGISTRY_DIR / f"{run_id}.json").write_text(text)
     return run_id
 
 
@@ -80,7 +69,7 @@ def load_preds(run_id: str, train_ids: np.ndarray | None = None,
     """OOF/test predictions and ids of a run (must exist locally under runs/).
 
     Pass the current ``train_ids``/``test_ids`` to fail loudly when the run was made on other
-    data (another competition, regenerated rehearsal data, a different row order)."""
+    data (another competition, regenerated data, a different row order)."""
     path = config.RUNS_DIR / run_id / "preds.npz"
     if not path.exists():
         raise FileNotFoundError(f"{path} missing: predictions only exist on the machine "
@@ -95,19 +84,16 @@ def load_preds(run_id: str, train_ids: np.ndarray | None = None,
     return preds
 
 
-def record_lb(run_id: str, public_score: float, note: str = "",
-              competition: str | None = None) -> Path:
-    """Store the public leaderboard score of a submitted run (rehearsal scores stay local)."""
+def record_lb(run_id: str, public_score: float, note: str = "") -> Path:
+    """Store the public leaderboard score of a submitted run."""
     payload = {"run_id": run_id, "public_lb": public_score, "note": note,
                "recorded": datetime.now().isoformat(timespec="seconds")}
     text = json.dumps(payload, indent=2)
     config.SHARED_LB_DIR.mkdir(parents=True, exist_ok=True)
-    path = config.SHARED_LB_DIR / f"{run_id}.json"
+    (config.SHARED_LB_DIR / f"{run_id}.json").write_text(text)
+    config.LB_DIR.mkdir(parents=True, exist_ok=True)
+    path = config.LB_DIR / f"{run_id}.json"
     path.write_text(text)
-    if not (competition or "").startswith("rehearsal"):  # committed copy, cross-machine
-        config.LB_DIR.mkdir(parents=True, exist_ok=True)
-        path = config.LB_DIR / f"{run_id}.json"
-        path.write_text(text)
     return path
 
 
@@ -123,7 +109,7 @@ def _read_jsons(paths: list[Path]) -> pd.DataFrame:
 
 
 def all_runs() -> pd.DataFrame:
-    """Metadata of every run known here: committed registry + local shared runs/."""
+    """Metadata of every run known here: committed registry + local runs/."""
     paths = sorted(config.REGISTRY_DIR.glob("*.json")) + sorted(config.RUNS_DIR.glob("*/meta.json"))
     return _read_jsons(paths)
 
@@ -144,6 +130,6 @@ def leaderboard(metric: str | None = None, competition: str | None = None) -> pd
         return runs
     ascending = not get_metric(runs["metric"].iloc[0]).greater_is_better
     runs = runs.assign(local=[(config.RUNS_DIR / r / "preds.npz").exists() for r in runs.run_id])
-    cols = [c for c in ["run_id", "cv", "cv_std", "public_lb", "model", "n_features", "agent",
-                        "local", "branch", "notes"] if c in runs.columns]
+    cols = [c for c in ["run_id", "cv", "cv_std", "public_lb", "model", "n_features", "local",
+                        "notes"] if c in runs.columns]
     return runs.sort_values("cv", ascending=ascending)[cols].reset_index(drop=True)

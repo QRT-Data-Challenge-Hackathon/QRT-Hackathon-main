@@ -1,7 +1,7 @@
-"""Synthetic rehearsal datasets shaped like past QRT challenges (Challenge-Data file layout).
+"""Synthetic datasets shaped like past QRT challenges (Challenge-Data file layout).
 
 Each generator writes X_train.csv, y_train.csv, X_test.csv, sample_submission.csv and
-y_test_hidden.csv (to score rehearsal submissions locally) into ``<out_dir>``. Signals are weak
+y_test_hidden.csv (to score submissions locally) into ``<out_dir>``. Signals are weak
 on purpose (financial data is noisy): a good pipeline beats the naive baseline by a little.
 
   stock_sign   panel (DATE x STOCK), RET_1..20 / VOLUME_1..20, target sign of next return,
@@ -151,7 +151,7 @@ def _sample_values(y_test: pd.DataFrame, kind: str) -> pd.DataFrame:
 
 
 def generate(kind: str, out_dir: Path, seed: int = 0) -> Path:
-    """Write the rehearsal dataset ``kind`` to ``out_dir``; returns the directory."""
+    """Write the synthetic dataset ``kind`` to ``out_dir``; returns the directory."""
     if kind not in GENERATORS:
         raise ValueError(f"unknown kind {kind!r}; choose from {sorted(GENERATORS)}")
     X, y, is_test = GENERATORS[kind](np.random.default_rng(seed))

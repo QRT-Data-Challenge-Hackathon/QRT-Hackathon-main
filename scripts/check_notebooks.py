@@ -1,7 +1,7 @@
 """Verify (default) or strip (--fix) outputs and execution counts in notebooks.
 
-Committed notebooks must have no outputs: outputs bloat diffs, leak data, and make parallel
-agents' merges conflict. Usage: python scripts/check_notebooks.py [--fix] [paths...]
+Committed notebooks must have no outputs: outputs bloat diffs, can leak competition data and
+make merges conflict. Usage: python scripts/check_notebooks.py [--fix] [paths...]
 (default paths: every tracked-looking *.ipynb outside .venv/.worktrees/notebooks/scratch).
 """
 

@@ -1,0 +1,31 @@
+{
+  "run_id": "1124-193430_blend-sectors-cnn",
+  "slug": "blend-sectors-cnn",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5430988936950844,
+  "cv_std": 0.006377245685001292,
+  "fold_scores": [
+    0.5536604147005579,
+    0.5450873085310179,
+    0.5393673653249523,
+    0.5345039801042551,
+    0.5428753998146384
+  ],
+  "model": "blend-z",
+  "params": {
+    "runs": [
+      "1124-193326_repro22-sectors",
+      "1124-193353_cnn-path"
+    ]
+  },
+  "n_features": 2,
+  "features": [
+    "1124-193326_repro22-sectors",
+    "1124-193353_cnn-path"
+  ],
+  "elapsed_s": 0.4,
+  "git_sha": "b7b2706",
+  "created": "2026-11-24T19:34:30",
+  "notes": "z-score blend"
+}

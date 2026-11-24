@@ -5,11 +5,11 @@
 
 Each model is fit on a tiny table (this downloads its weights into ~/.cache), then the same
 checks run again in a fresh process with HF_HUB_OFFLINE=1 through the worker process, which is
-how the toolkit runs them at the event.
+how the toolkit runs them.
 
 TabPFN-3.5 is non-commercial and needs a one-time licence acceptance by a human: run
-``--tabpfn3`` in your own terminal (not through an agent), log in at ux.priorlabs.ai when the
-browser opens, accept the licence. Check the event rules before using it.
+``--tabpfn3`` in your own terminal, log in at ux.priorlabs.ai when the browser opens and
+accept the licence. Check the competition rules before using it.
 """
 
 from __future__ import annotations

@@ -1,0 +1,31 @@
+# competition.toml on the intraday feature tables written by build.py (data/derived).
+# Same CV, metric and signed labels. Feature variants reuse it through QRTC_DATA_DIR:
+#   QRTC_CONFIG=experiments/intraday_ridge/spec.toml QRTC_DATA_DIR=data/derived_v8 uv run ...
+
+[competition]
+name = "qrt-x-eth-hackathon-24-11-2026"
+task = "binary"
+metric = "weighted_accuracy"
+id_col = "ID"
+target_cols = ["Close return"]
+date_col = "DATE_ID"
+group_col = "STOCK_ID"
+weight_col = "abs_target"
+binarize_target = true
+signed_labels = true
+submission_cols = []
+drop_cols = ["DATE_ID"]
+cv = "date_blocks"
+n_splits = 5
+embargo = 0
+seed = 42
+
+[metric_params]
+
+[files]
+dir = "data/derived"
+x_train = "X_train.parquet"
+y_train = "y_train.parquet"
+x_test = "X_submit.parquet"   # train + test ids: Kaggle wants every id in the file
+sample_submission = ""
+hidden_y_test = ""

@@ -1,0 +1,28 @@
+{
+  "run_id": "1124-184746_blend-rank",
+  "slug": "blend-rank",
+  "competition": "qrt-eth-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5389733080726612,
+  "cv_std": 0.0,
+  "fold_scores": [
+    0.5389733080726612
+  ],
+  "model": "blend-rank",
+  "params": {
+    "runs": [
+      "1124-184652_logreg-base-w",
+      "1124-184705_lgbm-shallow-base-w"
+    ],
+    "w": [
+      1.0,
+      1.0
+    ]
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "3988876",
+  "created": "2026-11-24T18:47:46",
+  "notes": "1124-184652_logreg-base-w,1124-184705_lgbm-shallow-base-w"
+}
