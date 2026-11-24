@@ -32,6 +32,7 @@ def parse() -> argparse.Namespace:
     p.add_argument("--raw", default="data/raw")
     p.add_argument("--out", default="data/derived")
     p.add_argument("--history", action="store_true", help="add rolling per-stock features")
+    p.add_argument("--rich", action="store_true", help="v2: per-bar relative + idio features")
     return p.parse_args()
 
 
@@ -50,6 +51,7 @@ def flatten(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> int:
     a = parse()
+    I.RICH = a.rich
     start = time.time()
     raw = SHARED_ROOT / a.raw
     train, test, y = load(raw)

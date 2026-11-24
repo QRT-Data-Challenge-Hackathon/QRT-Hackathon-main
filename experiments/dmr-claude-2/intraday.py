@@ -18,6 +18,9 @@ from qrtc import features as F
 HIDDEN_BARS = 6  # last 30 minutes of 5-minute bars
 LAGS = (1, 3, 6, 12, 24)
 ROLL_DAYS = (5, 20)
+RICH = False                       # v2 features (set by build.py --rich)
+REL_BARS = (1, 2, 3, 4, 5, 6, 8, 10, 12)
+IDIO_WINDOWS = (1, 3, 6, 12, 24)
 
 
 def to_wide(long: pd.DataFrame, day: str, stock: str, time: str, price: str) -> pd.DataFrame:
@@ -110,9 +113,19 @@ def country_beta(visible: pd.DataFrame, groups: pd.DataFrame) -> pd.DataFrame:
     beta = np.where(var_m > 0, cov / np.where(var_m > 0, var_m, 1), np.nan)
     corr = np.where((var_m > 0) & (var_r > 0), cov / np.sqrt(var_m * var_r + 1e-300), np.nan)
     resid = rc - beta[:, None] * mc
-    return pd.DataFrame({"beta_day": beta, "corr_day": corr,
-                         "idio_vol": np.sqrt((resid ** 2).sum(1) / cnt),
-                         "idio_last12": resid[:, -12:].sum(1)}, index=visible.index)
+    idio_vol = np.sqrt((resid ** 2).sum(1) / cnt)
+    out = {"beta_day": beta, "corr_day": corr, "idio_vol": idio_vol}
+    if RICH:
+        rel = r - m  # stock minus country, bar by bar (0 where missing)
+        for k in REL_BARS:
+            out[f"relbar_{k}"] = rel[:, -k]
+        for k in IDIO_WINDOWS:
+            out[f"idio_last{k}"] = resid[:, -k:].sum(1)
+            out[f"idio_last{k}_z"] = out[f"idio_last{k}"] / np.where(idio_vol > 0, idio_vol,
+                                                                      np.nan) / np.sqrt(k)
+    else:
+        out["idio_last12"] = resid[:, -12:].sum(1)
+    return pd.DataFrame(out, index=visible.index)
 
 
 def build_panel(visible: pd.DataFrame, country_of: pd.Series, day: str, stock: str,
