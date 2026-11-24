@@ -18,6 +18,10 @@ Feature families (each returns only the new columns, indexed like the input):
   ctx    country context: country mean / dispersion of window returns, country vol
   bars   last 6 bars relative to the country path, vol-scaled relative window moves
   shape  trend slope / R^2, drawdown, run-up, distance to the day's high/low, autocorrelation
+  idio   cumulative residual path: t-stats, quarter-day segments, range position, ranks
+  tick   bid-ask bounce proxies: tick size, flat bars, Roll spread, last moves in ticks
+  idio8  residual return per hourly segment (vol-scaled) and its day x country ranks
+  mkt    beta / residual vs the all-stock day path, the country's path vs the market
 """
 
 from __future__ import annotations
@@ -107,19 +111,103 @@ def _group_mean_path(rets: np.ndarray, codes: np.ndarray) -> np.ndarray:
     return means.loc[codes].to_numpy()
 
 
-def beta_residual(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str) -> pd.DataFrame:
-    """Family ``beta``: intraday beta to the country path and residual (idio) window returns."""
+def _country_fit(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str
+                 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """5-min returns, beta and correlation to the day x country path, and residual returns."""
     rets = np.nan_to_num(np.diff(lp, axis=1))
     codes = keys.groupby([date, country], sort=False).ngroup().to_numpy()
     cpath = _group_mean_path(rets, codes)
     rc, cc = rets - rets.mean(axis=1, keepdims=True), cpath - cpath.mean(axis=1, keepdims=True)
     var_c = (cc ** 2).sum(axis=1)
     beta = (rc * cc).sum(axis=1) / (var_c + EPS)
-    resid = rets - beta[:, None] * cpath
     corr = (rc * cc).sum(axis=1) / (np.sqrt((rc ** 2).sum(axis=1) * var_c) + EPS)
+    return rets, beta, corr, rets - beta[:, None] * cpath
+
+
+def beta_residual(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str) -> pd.DataFrame:
+    """Family ``beta``: intraday beta to the country path and residual (idio) window returns."""
+    _, beta, corr, resid = _country_fit(keys, lp, date, country)
     data = {f"idio_w{k}": resid[:, -k:].sum(axis=1) for k in _windows(lp.shape[1])}
     data.update(beta=beta, corr_country=corr, idio_vol=resid.std(axis=1),
                 idio_vol_tail=resid[:, -VOL_TAIL:].std(axis=1), idio_day=resid.sum(axis=1))
+    return pd.DataFrame(data, index=keys.index)
+
+
+def idio_path(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str) -> pd.DataFrame:
+    """Family ``idio``: shape of the cumulative residual path (t-stats, segments, range),
+    plus its day x country ranks."""
+    _, _, _, resid = _country_fit(keys, lp, date, country)
+    cum, n = np.cumsum(resid, axis=1), resid.shape[1]
+    vol = resid.std(axis=1) + EPS
+    hi, lo, last = cum.max(axis=1), cum.min(axis=1), cum[:, -1]
+    data = {f"idio_seg{i}": resid[:, s].sum(axis=1)
+            for i, s in enumerate(np.array_split(np.arange(n), 4))}
+    data.update({f"idio_w{k}_t": resid[:, -k:].sum(axis=1) / (vol * np.sqrt(k))
+                 for k in (3, 12, 48) if k < n})
+    data.update(idio_day_t=last / (vol * np.sqrt(n)), idio_pos=(last - lo) / (hi - lo + EPS),
+                idio_drawdown=(cum - np.maximum.accumulate(cum, axis=1)).min(axis=1),
+                idio_runup=(cum - np.minimum.accumulate(cum, axis=1)).max(axis=1),
+                idio_from_high=last - hi, idio_from_low=last - lo,
+                idio_autocorr1=(resid[:, 1:] * resid[:, :-1]).sum(axis=1)
+                / ((resid ** 2).sum(axis=1) + EPS))
+    frame = pd.DataFrame(data, index=keys.index)
+    rank_cols = ["idio_day_t", "idio_w12_t", "idio_seg3", "idio_pos"]
+    ranked = cs_rank(pd.concat([keys[[date, country]], frame[rank_cols]], axis=1), rank_cols,
+                     [date, country])
+    return pd.concat([frame, ranked[[f"{c}_csrank" for c in rank_cols]]], axis=1)
+
+
+def idio_hourly(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str,
+                n_segments: int = 8) -> pd.DataFrame:
+    """Family ``idio8``: residual return per hourly segment (vol-scaled) and its ranks."""
+    _, _, _, resid = _country_fit(keys, lp, date, country)
+    vol = resid.std(axis=1) + EPS
+    segs = np.array_split(np.arange(resid.shape[1]), n_segments)
+    data = {f"idio_h{i}_t": resid[:, s].sum(axis=1) / (vol * np.sqrt(len(s)))
+            for i, s in enumerate(segs)}
+    frame = pd.DataFrame(data, index=keys.index)
+    cols = list(data)
+    ranked = cs_rank(pd.concat([keys[[date, country]], frame], axis=1), cols, [date, country])
+    return pd.concat([frame, ranked[[f"{c}_csrank" for c in cols]]], axis=1)
+
+
+def market_relative(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str
+                    ) -> pd.DataFrame:
+    """Family ``mkt``: beta / residual vs the all-stock day path, country path vs market."""
+    rets = np.nan_to_num(np.diff(lp, axis=1))
+    mpath = _group_mean_path(rets, keys.groupby(date, sort=False).ngroup().to_numpy())
+    cpath = _group_mean_path(rets, keys.groupby([date, country], sort=False).ngroup().to_numpy())
+    rm, mm = rets - rets.mean(axis=1, keepdims=True), mpath - mpath.mean(axis=1, keepdims=True)
+    beta_m = (rm * mm).sum(axis=1) / ((mm ** 2).sum(axis=1) + EPS)
+    resid_m, c_vs_m = rets - beta_m[:, None] * mpath, cpath - mpath
+    data = {"beta_mkt": beta_m, "idio_mkt_day": resid_m.sum(axis=1)}
+    for k in (6, 12, 48):
+        data[f"idio_mkt_w{k}"] = resid_m[:, -k:].sum(axis=1)
+        data[f"country_vs_mkt_w{k}"] = c_vs_m[:, -k:].sum(axis=1)
+    data["country_vs_mkt_day"] = c_vs_m.sum(axis=1)
+    return pd.DataFrame(data, index=keys.index)
+
+
+FLAT = 3e-5  # |5-min log return| below this is a flat bar (prices carry ~1e-6 float noise)
+
+
+def tick_profile(keys: pd.DataFrame, lp: np.ndarray, date: str, country: str) -> pd.DataFrame:
+    """Family ``tick``: bid-ask bounce proxies (tick size, flat bars, Roll spread, moves in ticks)."""
+    rets = np.nan_to_num(np.diff(lp, axis=1))
+    moves = np.where(np.abs(rets) > FLAT, np.abs(rets), np.nan)
+    tick = np.nan_to_num(np.nanmin(moves, axis=1), nan=1.0)
+    med_move = np.nan_to_num(np.nanmedian(moves, axis=1), nan=1.0)
+    lag_cov = ((rets[:, 1:] - rets[:, 1:].mean(axis=1, keepdims=True))
+               * (rets[:, :-1] - rets[:, :-1].mean(axis=1, keepdims=True))).mean(axis=1)
+    roll = 2 * np.sqrt(np.clip(-lag_cov, 0, None))
+    data = {
+        "log_price": lp[:, -1], "tick_rel": tick, "med_move": med_move,
+        "flat_frac": (np.abs(rets) <= FLAT).mean(axis=1),
+        "flat_tail": (np.abs(rets[:, -VOL_TAIL:]) <= FLAT).mean(axis=1),
+        "roll_spread": roll, "roll_to_vol": roll / (rets.std(axis=1) + EPS),
+        "last_in_ticks": rets[:, -1] / tick, "w3_in_ticks": rets[:, -3:].sum(axis=1) / tick,
+        "last_flat": (np.abs(rets[:, -1]) <= FLAT).astype(float),
+    }
     return pd.DataFrame(data, index=keys.index)
 
 
@@ -175,6 +263,7 @@ FAMILIES: dict[str, Callable[..., pd.DataFrame]] = {     # (keys, ret, date, cou
 }
 PATH_FAMILIES: dict[str, Callable[..., pd.DataFrame]] = {  # (keys, log prices, date, country)
     "beta": beta_residual, "bars": bar_profile, "shape": path_shape,
+    "idio": idio_path, "tick": tick_profile, "idio8": idio_hourly, "mkt": market_relative,
 }
 ALL_FAMILIES = ("ret", *FAMILIES, *PATH_FAMILIES)
 

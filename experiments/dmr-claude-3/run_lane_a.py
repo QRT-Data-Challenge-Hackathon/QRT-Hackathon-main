@@ -41,6 +41,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="raw Kaggle files (for Price TS) under the main checkout")
     p.add_argument("--baseline", default="", help="run_id to compare against (paired by fold)")
     p.add_argument("--fit-weight", action="store_true")
+    p.add_argument("--stock-profile", action="store_true",
+                   help="add per-stock feature means over all rows and today-vs-own-mean ratios")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--export", default="")
     p.add_argument("--slug", default="")
@@ -89,6 +91,37 @@ def features_for(ds: io.Dataset, spec: config.Spec, args: argparse.Namespace,
     X_test = pd.concat([test[base], new_test.drop(columns=base, errors="ignore")], axis=1)
     cats = [c for c in auto_categoricals(X) if c in X.columns] + [args.country]
     return to_category(X, X_test, sorted(set(cats) & set(X.columns)))
+
+
+PROFILE_COLS = ("vol", "vol_last12", "idio_vol", "beta", "corr_country", "tick_rel",
+                "flat_frac", "roll_spread", "med_move")
+
+
+def stock_profile(X: pd.DataFrame, X_test: pd.DataFrame, ids: pd.Series, ids_test: pd.Series,
+                  stock: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-stock means of non-target features over every row (train + test, no targets used),
+    and today's value relative to the stock's own mean."""
+    cols = [c for c in PROFILE_COLS if c in X.columns]
+    if not cols:
+        raise ValueError(f"--stock-profile needs one of {PROFILE_COLS} among the features")
+    rows = pd.concat([X[[stock, *cols]].assign(_id=ids.to_numpy()),
+                      X_test[[stock, *cols]].assign(_id=ids_test.to_numpy())])
+    means = rows.drop_duplicates("_id").groupby(stock, observed=True)[cols].mean()
+
+    def attach(frame: pd.DataFrame) -> pd.DataFrame:
+        prof = means.reindex(frame[stock].to_numpy()).set_index(frame.index)
+        ratio = frame[cols] / (prof[cols] + laf.EPS)
+        return pd.concat([frame, prof.add_suffix("_stock"), ratio.add_suffix("_vs_stock")], axis=1)
+
+    return attach(X), attach(X_test)
+
+
+def make_slug(args: argparse.Namespace, tag: str) -> str:
+    """Short slug (run ids keep 40 chars): a-<base>-<families>-<model>[-fw][-sp]."""
+    model = {"lgbm_shallow": "lgs", "logreg": "lr", "catboost_shallow": "cbs"}.get(args.model,
+                                                                                  args.model)
+    return (f"a-{args.base[0]}-{tag}-{model}{'-fw' if args.fit_weight else ''}"
+            f"{'-sp' if args.stock_profile else ''}")
 
 
 def compare(baseline: str, result: CVResult) -> str:
@@ -140,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     families = [f.strip() for f in args.families.split(",") if f.strip()]
     ds = io.load_dataset(spec)
     X, X_test = features_for(ds, spec, args, families)
+    if args.stock_profile:
+        X, X_test = stock_profile(X, X_test, ds.train[spec.id_col], ds.test[spec.id_col],
+                                  spec.group_col)
     y = ds.y_vector
     splits = make_splits(ds.train, y, spec, test=ds.test)
     weight = io.train_weight(ds, spec)
@@ -155,10 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.export:
         export(args.export, tag, ds, spec, X, X_test)
     if not args.no_save:
-        slug = args.slug or (f"lane-a-{args.base}-{tag}-{args.model}"
-                             f"{'-fw' if args.fit_weight else ''}")
-        notes = json.dumps({"families": families, "base": args.base,
-                            "fit_weight": args.fit_weight, "baseline": args.baseline})
+        slug = args.slug or make_slug(args, tag)
+        notes = json.dumps({"families": families, "base": args.base, "model": args.model,
+                            "fit_weight": args.fit_weight, "stock_profile": args.stock_profile,
+                            "baseline": args.baseline})
         save(result, spec, ds, slug, notes)
     return 0
 
