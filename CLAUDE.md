@@ -28,6 +28,11 @@ Never rephrase a command to slip past it, and never edit the hook, `.githooks/` 
    and work inside the printed `.worktrees/...` directory (or use the `EnterWorktree` tool with
    the same branch naming).
 3. `gh pr list --state open` — respect other agents' claims (AGENTS.md §5).
+4. `gh issue list --state all` — before starting any idea, check whether a coworker already has
+   an issue for it. If so, pick something else or comment on their issue.
+5. New idea → **open a GitHub issue first**, before any code:
+   `gh issue create --title "[<AGENT_NAME>] exp: <topic>" --body "<idea, files, how measured>"`.
+   Reference it in the branch's PR (`Refs #<n>` / `Closes #<n>`) and post results on it.
 
 ### Skills — when to use what
 
