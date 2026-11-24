@@ -1,64 +1,70 @@
 """Kaggle files -> shared feature tables in <main checkout>/data/derived/ (parquet).
 
-  uv run python experiments/dmr-claude-2/build.py --train data/raw/train.csv \
-      --test data/raw/test.csv --id ID --day DAY --stock STOCK --country COUNTRY \
-      --target TARGET [--y-train data/raw/y_train.csv] [--sample data/raw/sample_submission.csv]
+  uv run python experiments/dmr-claude-2/build.py            # defaults match the event files
+  uv run python experiments/dmr-claude-2/build.py --history  # + rolling per-stock features
 
-Relative paths resolve against the main checkout. Writes X_train / y_train / X_test parquet
-(+ the sample submission) so competition.toml can point at data/derived.
+Input (data/raw): x_train.parquet / x_test.parquet with ID, DATE_ID, STOCK_ID, COUNTRY,
+OPEN_TIME, CLOSE_TIME and "Price TS" (list of 5-min prices up to the cutoff = close - 30 min);
+y_train.csv with ID, "Close return" (idiosyncratic return cutoff -> close, de-meaned per
+date x country). Output: X_train / y_train / X_test parquet, one row per ID.
 """
 
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
+import time
 from pathlib import Path
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 import intraday as I  # noqa: E402
 
-from qrtc.config import SHARED_ROOT, resolve_shared  # noqa: E402
-from qrtc.io import read_table  # noqa: E402
+from qrtc.config import SHARED_ROOT  # noqa: E402
+
+KEYS = ["ID", "DATE_ID", "STOCK_ID", "COUNTRY"]
+WIDTH = 96
 
 
 def parse() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    for name in ("train", "test", "id", "day", "stock", "country", "target"):
-        p.add_argument(f"--{name}", required=True)
-    p.add_argument("--y-train", help="separate target file joined on --id")
-    p.add_argument("--sample", help="sample submission to copy next to the tables")
+    p.add_argument("--raw", default="data/raw")
     p.add_argument("--out", default="data/derived")
-    p.add_argument("--extra", nargs="*", default=[], help="non-price columns to keep as-is")
+    p.add_argument("--history", action="store_true", help="add rolling per-stock features")
     return p.parse_args()
+
+
+def load(raw: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    train = pd.read_parquet(raw / "x_train.parquet")
+    test = pd.read_parquet(raw / "x_test.parquet")
+    y = pd.read_csv(raw / "y_train.csv")
+    return train, test, y
+
+
+def flatten(df: pd.DataFrame) -> pd.DataFrame:
+    prices = I.stack_prices(df["Price TS"], WIDTH)
+    meta = df[KEYS].assign(open_hour=df["OPEN_TIME"].str[:2].astype(int))
+    return pd.concat([meta, prices], axis=1).reset_index(drop=True)
 
 
 def main() -> int:
     a = parse()
-    train, test = read_table(resolve_shared(a.train)), read_table(resolve_shared(a.test))
-    if a.y_train:
-        train = train.merge(read_table(resolve_shared(a.y_train)), on=a.id, validate="1:1")
-    keys = [a.id, a.day, a.stock, a.country, a.target, *a.extra]
-    bars = I.detect_bar_cols(train, keys)
-    missing = [c for c in bars if c not in test.columns]
-    if missing:
-        raise SystemExit(f"price columns missing in test: {missing[:5]}")
-    print(f"train {train.shape} test {test.shape} bars={len(bars)} first={bars[:3]} "
-          f"last={bars[-3:]}")
-    X_tr, X_te = I.features_from_rows(train, test, bars, a.id, a.day, a.stock, a.country)
-    if a.extra:
-        X_tr = X_tr.merge(train[[a.id, *a.extra]], on=a.id, validate="1:1")
-        X_te = X_te.merge(test[[a.id, *a.extra]], on=a.id, validate="1:1")
-    y_tr = train[[a.id, a.target]].set_index(a.id).loc[X_tr[a.id]].reset_index()
-    out = Path(a.out) if Path(a.out).is_absolute() else SHARED_ROOT / a.out  # shared data/
+    start = time.time()
+    raw = SHARED_ROOT / a.raw
+    train, test, y = load(raw)
+    tr, te = flatten(train), flatten(test)
+    bars = [c for c in tr.columns if c.startswith("P")]
+    X_tr, X_te = I.features_from_rows(tr, te, bars, *KEYS, history=a.history)
+    for X, src in ((X_tr, tr), (X_te, te)):
+        X["open_hour"] = X["ID"].map(src.set_index("ID")["open_hour"])
+    y_tr = y.set_index("ID").loc[X_tr["ID"]].reset_index()
+    out = Path(a.out) if Path(a.out).is_absolute() else SHARED_ROOT / a.out
     out.mkdir(parents=True, exist_ok=True)
     X_tr.to_parquet(out / "X_train.parquet", index=False)
     y_tr.to_parquet(out / "y_train.parquet", index=False)
     X_te.to_parquet(out / "X_test.parquet", index=False)
-    if a.sample:
-        shutil.copy(resolve_shared(a.sample), out / "sample_submission.csv")
-    print(f"wrote {out}: X_train {X_tr.shape}, X_test {X_te.shape}, features "
-          f"{X_tr.shape[1] - 1}")
+    print(f"wrote {out}: X_train {X_tr.shape}, X_test {X_te.shape} in {time.time() - start:.0f}s")
     return 0
 
 
