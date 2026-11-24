@@ -44,11 +44,17 @@ def return_paths() -> tuple[np.ndarray, np.ndarray]:
 
 
 class Net(nn.Module):
-    def __init__(self, n_tab: int, conv: bool = True):
+    """arch: "cnn" (1D conv over the path), "gru" (GRU over the path, as in the Jane Street
+    2024 public-LB-6th ensemble), or "mlp" (features only)."""
+
+    def __init__(self, n_tab: int, arch: str = "cnn"):
         super().__init__()
+        self.arch = arch
         self.conv = nn.Sequential(nn.Conv1d(2, 32, 5, padding=2), nn.ReLU(),
-                                  nn.Conv1d(32, 32, 5, padding=2), nn.ReLU()) if conv else None
-        width = (3 * 32 if conv else 0) + n_tab
+                                  nn.Conv1d(32, 32, 5, padding=2), nn.ReLU()) \
+            if arch == "cnn" else None
+        self.gru = nn.GRU(2, 64, num_layers=1, batch_first=True) if arch == "gru" else None
+        width = {"cnn": 3 * 32, "gru": 2 * 64, "mlp": 0}[arch] + n_tab
         self.head = nn.Sequential(nn.Linear(width, 64), nn.ReLU(), nn.Dropout(0.1),
                                   nn.Linear(64, 1))
 
@@ -57,6 +63,9 @@ class Net(nn.Module):
         if self.conv is not None:
             h = self.conv(path)
             parts += [h.mean(-1), h[..., -12:].mean(-1), h[..., -1]]
+        if self.gru is not None:
+            seq, last = self.gru(path.transpose(1, 2))  # (n, 95, 64), (1, n, 64)
+            parts += [last[0], seq[:, -12:].mean(1)]
         return self.head(torch.cat(parts, dim=1)).squeeze(1)
 
 
@@ -71,9 +80,9 @@ def predict(net: Net, path: np.ndarray, tab: np.ndarray, batch: int = 8192) -> n
     return np.concatenate(out)
 
 
-def fit_fold(path, tab, y, seed: int, epochs: int, conv: bool) -> Net:
+def fit_fold(path, tab, y, seed: int, epochs: int, arch: str) -> Net:
     torch.manual_seed(seed)
-    net = Net(tab.shape[1], conv).to(DEVICE)
+    net = Net(tab.shape[1], arch).to(DEVICE)
     opt = torch.optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-4)
     rng = np.random.default_rng(seed)
     for _ in range(epochs):
@@ -93,7 +102,7 @@ def standardise(train_tab: np.ndarray, *others: np.ndarray) -> list[np.ndarray]:
             for a in (train_tab, *others)]
 
 
-def run(spec, ds, epochs: int, conv: bool) -> CVResult:
+def run(spec, ds, epochs: int, arch: str, seeds: int = 1) -> CVResult:
     ids_all, paths = return_paths()
     row = pd.Series(np.arange(len(ids_all)), index=ids_all)
     tr_ids, te_ids = ds.train[spec.id_col].to_numpy(), ds.test[spec.id_col].to_numpy()
@@ -109,15 +118,17 @@ def run(spec, ds, epochs: int, conv: bool) -> CVResult:
     start = time.time()
     for k, (tr, va) in enumerate(splits):
         a, b, c = standardise(tab_tr[tr], tab_tr[va], tab_te)
-        net = fit_fold(p_tr[tr], a, y[tr], spec.seed + k, epochs, conv)
-        oof[va] = predict(net, p_tr[va], b)
-        test += predict(net, p_te, c) / len(splits)
+        oof[va] = 0.0
+        for s in range(seeds):  # seed ensemble, equal weights
+            net = fit_fold(p_tr[tr], a, y[tr], spec.seed + k + 1000 * s, epochs, arch)
+            oof[va] += predict(net, p_tr[va], b) / seeds
+            test += predict(net, p_te, c) / (len(splits) * seeds)
         print(f"  fold {k} done ({time.time() - start:.0f}s)", flush=True)
     scale = float(np.nanstd(oof)) or 1.0
     oof_p, test_p = (1.0 / (1.0 + np.exp(-v / scale)) for v in (oof, test))
     weight = io.train_weight(ds, spec)
     folds = [score_predictions(spec, ds.y_vector, oof_p, va, weight) for _, va in splits]
-    return CVResult(model="cnn" if conv else "mlp", params={"epochs": epochs},
+    return CVResult(model=arch, params={"epochs": epochs, "seeds": seeds},
                     features=tuple(feats), metric=spec.metric, score=float(np.mean(folds)),
                     score_std=float(np.std(folds)), fold_scores=tuple(folds), oof=oof_p,
                     test_pred=test_p, elapsed_s=time.time() - start)
@@ -126,15 +137,18 @@ def run(spec, ds, epochs: int, conv: bool) -> CVResult:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=4)
-    ap.add_argument("--no-conv", action="store_true")
+    ap.add_argument("--no-conv", action="store_true", help="same as --arch mlp")
+    ap.add_argument("--arch", choices=["cnn", "gru", "mlp"], default="cnn")
+    ap.add_argument("--seeds", type=int, default=1)
     a = ap.parse_args()
+    arch = "mlp" if a.no_conv else a.arch
     spec = config.load_spec()
     ds = io.load_dataset(spec)
-    result = run(spec, ds, a.epochs, not a.no_conv)
+    result = run(spec, ds, a.epochs, arch, a.seeds)
     print(result.summary(), f"device={DEVICE}")
     tr_ids, te_ids = ds.train[spec.id_col].to_numpy(), ds.test[spec.id_col].to_numpy()
-    run_id = tracking.save_run(result, spec, f"{result.model}-e{a.epochs}", tr_ids, te_ids,
-                               notes="torch 1D-CNN/MLP on return paths + v1 features")
+    run_id = tracking.save_run(result, spec, f"{result.model}-e{a.epochs}-s{a.seeds}", tr_ids, te_ids,
+                               notes=f"torch {arch} on return paths + v1 features")
     path = submit.write_submission(submit.build_submission(spec, te_ids, result.test_pred,
                                                            ds.classes), spec, te_ids, run_id)
     print(f"run {run_id}\nsubmission {path}")
