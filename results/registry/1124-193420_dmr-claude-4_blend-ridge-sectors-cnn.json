@@ -1,0 +1,35 @@
+{
+  "run_id": "1124-193420_dmr-claude-4_blend-ridge-sectors-cnn",
+  "slug": "blend-ridge-sectors-cnn",
+  "agent": "dmr-claude-4",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5430181206319038,
+  "cv_std": 0.006355191950208279,
+  "fold_scores": [
+    0.549467223944192,
+    0.5472918108953043,
+    0.5374896900707148,
+    0.533419770879753,
+    0.547422107369555
+  ],
+  "model": "blend-z",
+  "params": {
+    "runs": [
+      "1124-190301_dmr-claude-4_ridge-repro7-ridge-v1-reg",
+      "1124-193326_dmr-claude-4_repro22-sectors",
+      "1124-193353_dmr-claude-4_cnn-path"
+    ]
+  },
+  "n_features": 3,
+  "features": [
+    "1124-190301_dmr-claude-4_ridge-repro7-ridge-v1-reg",
+    "1124-193326_dmr-claude-4_repro22-sectors",
+    "1124-193353_dmr-claude-4_cnn-path"
+  ],
+  "elapsed_s": 0.5,
+  "git_sha": "b7b2706",
+  "branch": "exp/dmr-claude-4/cnn-path",
+  "created": "2026-11-24T19:34:20",
+  "notes": "issue #29 blend"
+}

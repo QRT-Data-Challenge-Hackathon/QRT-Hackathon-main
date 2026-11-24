@@ -1,0 +1,31 @@
+{
+  "run_id": "1124-193353_dmr-claude-4_cnn-path",
+  "slug": "cnn-path",
+  "agent": "dmr-claude-4",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5352155668912826,
+  "cv_std": 0.0036494415444131884,
+  "fold_scores": [
+    0.5422197236259562,
+    0.5351413829857187,
+    0.5338845262372648,
+    0.5322127376538826,
+    0.5326194639535904
+  ],
+  "model": "cnn1d",
+  "params": {
+    "seeds": 1,
+    "c": 48,
+    "loss": "bce|y|"
+  },
+  "n_features": 1,
+  "features": [
+    "path_rel_ctry_cum_3x95"
+  ],
+  "elapsed_s": 255.6,
+  "git_sha": "b7b2706",
+  "branch": "exp/dmr-claude-4/cnn-path",
+  "created": "2026-11-24T19:33:53",
+  "notes": "issue #29"
+}
