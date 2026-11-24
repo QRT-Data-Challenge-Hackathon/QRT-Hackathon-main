@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
+
+import numpy as np
 
 from qrtc import config, io, submit, tracking
 from qrtc.cv import detect_strategy, make_splits
 from qrtc.features import auto_categoricals, to_category
-from qrtc.train import run_cv
+from qrtc.train import CVResult, run_cv, score_predictions
 
 
 def parse() -> argparse.Namespace:
@@ -29,7 +32,27 @@ def parse() -> argparse.Namespace:
     p.add_argument("--drop-prefix", nargs="*", default=[], help="drop features with prefix")
     p.add_argument("--only-prefix", nargs="*", default=[], help="keep only these prefixes")
     p.add_argument("--cat", nargs="*", default=[], help="extra columns to treat as categorical")
+    p.add_argument("--regress", action="store_true", help="fit the real target, use its sign")
     return p.parse_args()
+
+
+def regress_cv(spec, ds, X, X_test, splits, model, params, weight, fit_weight) -> CVResult:
+    """Fit ``model`` on the real target, score its sign with the spec's metric.
+
+    Predictions are mapped to pseudo-probabilities sigmoid(pred / std) so that the 0.5
+    threshold of the label metrics equals pred = 0 and runs blend with classifiers."""
+    raw = ds.y_raw.iloc[:, 0].to_numpy(dtype=float)
+    rspec = replace(spec, task="regression", metric="pearson")
+    res = run_cv(rspec, X, raw, X_test, splits, model, params, None, None,
+                 fit_weight=fit_weight, verbose=False)
+    scale = float(np.nanstd(res.oof)) or 1.0
+    oof, test = (1.0 / (1.0 + np.exp(-a / scale)) for a in (res.oof, res.test_pred))
+    folds = [score_predictions(spec, ds.y_vector, oof, va, weight) for _, va in splits]
+    for i, s in enumerate(folds):
+        print(f"  fold {i}: {spec.metric} = {s:.5f}")
+    return replace(res, metric=spec.metric, score=float(np.mean(folds)),
+                   score_std=float(np.std(folds)), fold_scores=tuple(folds), oof=oof,
+                   test_pred=test)
 
 
 def select(feats: list[str], drop: list[str], only: list[str]) -> list[str]:
@@ -54,9 +77,14 @@ def main() -> int:
     params = json.loads(args.params) if args.params else None
     print(f"cv={strategy} folds={len(splits)} model={args.model} features={X.shape[1]} "
           f"fit_weight={'|y|' if fit_weight is not None else 'none'} cats={cats}")
-    result = run_cv(spec, X, ds.y_vector, X_test, splits, args.model, params, weight, groups,
-                    fit_weight=fit_weight)
-    slug = "-".join(filter(None, [args.model, args.slug, "w" if fit_weight is not None else ""]))
+    if args.regress:
+        result = regress_cv(spec, ds, X, X_test, splits, args.model, params, weight, fit_weight)
+        print(result.summary())
+    else:
+        result = run_cv(spec, X, ds.y_vector, X_test, splits, args.model, params, weight,
+                        groups, fit_weight=fit_weight)
+    tags = ["reg" if args.regress else "", "w" if fit_weight is not None else ""]
+    slug = "-".join(filter(None, [args.model, args.slug, *tags]))
     notes = f"cv={strategy} fit_weight={fit_weight is not None} drop={args.drop_prefix} " \
             f"only={args.only_prefix}"
     ids, test_ids = ds.train[spec.id_col].to_numpy(), ds.test[spec.id_col].to_numpy()
