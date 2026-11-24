@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 
@@ -34,6 +36,7 @@ def parse() -> argparse.Namespace:
     p.add_argument("--cat", nargs="*", default=[], help="extra columns to treat as categorical")
     p.add_argument("--regress", action="store_true", help="fit the real target, use its sign")
     p.add_argument("--clip-y", type=float, default=0.0, help="--regress: winsorise quantile")
+    p.add_argument("--testlike-weight", action="store_true", help="up-weight test-like days")
     return p.parse_args()
 
 
@@ -79,6 +82,14 @@ def main() -> int:
     weight = io.train_weight(ds, spec)
     groups = ds.train[spec.date_col].to_numpy() if spec.date_col else None
     fit_weight = None if args.no_fit_weight else weight
+    if args.testlike_weight:  # importance weights: odds that a train day looks like a test day
+        sys.path.insert(0, str(Path(__file__).parent))
+        from testlike import testlike_prob
+        test_only = ds.test[~ds.test[spec.id_col].isin(ds.train[spec.id_col])]  # X_submit
+        p = testlike_prob(ds.train, test_only).clip(0.05, 0.95)
+        odds = (p / (1 - p)).clip(0.2, 5.0)
+        w_day = ds.train[spec.date_col].map(odds / odds.mean()).to_numpy(dtype=float)
+        fit_weight = w_day if fit_weight is None else fit_weight * w_day
     params = json.loads(args.params) if args.params else None
     print(f"cv={strategy} folds={len(splits)} model={args.model} features={X.shape[1]} "
           f"fit_weight={'|y|' if fit_weight is not None else 'none'} cats={cats}")
