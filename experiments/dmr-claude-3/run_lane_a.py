@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +28,7 @@ from qrtc import config, io, submit, tracking  # noqa: E402
 from qrtc.cv import make_splits  # noqa: E402
 from qrtc.features import auto_categoricals, to_category  # noqa: E402
 from qrtc.submit import SubmissionError  # noqa: E402
-from qrtc.train import CVResult, run_cv  # noqa: E402
+from qrtc.train import CVResult, run_cv, score_predictions  # noqa: E402
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -46,6 +47,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="add per-stock feature means over all rows and today-vs-own-mean ratios")
     p.add_argument("--sectors", type=int, default=0,
                    help="K co-movement sectors (KMeans on residual paths) + vs-sector features")
+    p.add_argument("--seeds", type=int, default=1, help=f"average over the first N of {SEEDS}")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--export", default="")
     p.add_argument("--slug", default="")
@@ -147,12 +149,38 @@ def stock_profile(X: pd.DataFrame, X_test: pd.DataFrame, ids: pd.Series, ids_tes
     return attach(X), attach(X_test)
 
 
+SEEDS = (0, 7, 13, 21, 42)
+
+
+def seed_averaged_cv(spec: config.Spec, X: pd.DataFrame, y: np.ndarray, X_test: pd.DataFrame,
+                     splits: list, args: argparse.Namespace, params: dict | None,
+                     weight: np.ndarray | None, groups: np.ndarray) -> CVResult:
+    """run_cv over ``args.seeds`` LightGBM bagging seeds; OOF / test averaged, folds re-scored
+    on the average (seed noise of one lgbm_shallow run is ~0.0015 here)."""
+    results = []
+    for seed in SEEDS[:args.seeds]:
+        p = {**(params or {}), "bagging_seed": seed, "feature_fraction_seed": seed}
+        results.append(run_cv(spec, X, y, X_test, splits, args.model, p, weight, groups,
+                              fit_weight=weight if args.fit_weight else None, verbose=False))
+        print(f"  seed {seed}: {results[-1].summary()}")
+    oof = np.mean([r.oof for r in results], axis=0)
+    test = np.mean([r.test_pred for r in results], axis=0)
+    folds = tuple(score_predictions(spec, y, oof, va, weight, groups) for _, va in splits)
+    imp = pd.concat([r.importance for r in results], axis=1).mean(axis=1)
+    return replace(results[0], params={**(params or {}), "seeds": list(SEEDS[:args.seeds])},
+                   oof=oof, test_pred=test, score=float(np.mean(folds)),
+                   score_std=float(np.std(folds)), fold_scores=folds,
+                   importance=imp.sort_values(ascending=False),
+                   elapsed_s=sum(r.elapsed_s for r in results))
+
+
 def make_slug(args: argparse.Namespace, tag: str) -> str:
     """Short slug (run ids keep 40 chars): a-<base>-<families>-<model>[-fw][-sp]."""
     model = {"lgbm_shallow": "lgs", "logreg": "lr", "catboost_shallow": "cbs"}.get(args.model,
                                                                                   args.model)
     return (f"a-{args.base[0]}-{tag}-{model}{'-fw' if args.fit_weight else ''}"
-            f"{'-sp' if args.stock_profile else ''}{f'-k{args.sectors}' if args.sectors else ''}")
+            f"{'-sp' if args.stock_profile else ''}{f'-k{args.sectors}' if args.sectors else ''}"
+            f"{f'-x{args.seeds}' if args.seeds > 1 else ''}")
 
 
 def compare(baseline: str, result: CVResult) -> str:
@@ -213,9 +241,13 @@ def main(argv: list[str] | None = None) -> int:
     params = json.loads(args.params) if args.params else None
     print(f"families={families} base={args.base} model={args.model} feats={X.shape[1]} "
           f"folds={len(splits)} fit_weight={args.fit_weight} spec={spec.name} cv={spec.cv}")
-    result = run_cv(spec, X, y, X_test, splits, args.model, params, weight,
-                    ds.train[spec.date_col].to_numpy(),
-                    fit_weight=weight if args.fit_weight else None)
+    groups = ds.train[spec.date_col].to_numpy()
+    if args.seeds > 1:
+        result = seed_averaged_cv(spec, X, y, X_test, splits, args, params, weight, groups)
+        print(result.summary())
+    else:
+        result = run_cv(spec, X, y, X_test, splits, args.model, params, weight, groups,
+                        fit_weight=weight if args.fit_weight else None)
     print(compare(args.baseline, result))
     print("top features:", ", ".join(result.importance.head(10).index.astype(str)))
     tag = "-".join(families) or "none"
