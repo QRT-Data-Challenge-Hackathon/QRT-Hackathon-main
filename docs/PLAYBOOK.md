@@ -142,3 +142,4 @@ Final selection rule: **best CV that is stable across folds**, plus the simplest
 - Spec PR / merged at:
 - Submissions (time, run_id, CV, public LB):
 - Leaks/quirks found (and organiser ruling):
+- practice run by can
