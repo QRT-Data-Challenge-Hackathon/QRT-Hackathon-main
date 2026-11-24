@@ -19,6 +19,7 @@ HIDDEN_BARS = 6  # last 30 minutes of 5-minute bars
 LAGS = (1, 3, 6, 12, 24)
 ROLL_DAYS = (5, 20)
 RICH = False                       # v2 features (set by build.py --rich)
+DEVMEAN = False                    # v7 distance-to-average-price features (build.py --devmean)
 REL_BARS = (1, 2, 3, 4, 5, 6, 8, 10, 12)
 IDIO_WINDOWS = (1, 3, 6, 12, 24)
 
@@ -63,6 +64,10 @@ def bar_features(visible: pd.DataFrame) -> pd.DataFrame:
     out["range"] = hi - lo
     out["pos_in_range"] = (last - lo) / (hi - lo).replace(0, np.nan)
     out["n_bars"] = visible.notna().sum(axis=1)
+    if DEVMEAN:  # distance of the cutoff price to the day's / last hour's average price
+        out["r_devmean_day"] = last - lp.mean(axis=1)
+        out["r_devmean12"] = last - lp.iloc[:, -12:].mean(axis=1)
+        out["r_devmean6"] = last - lp.iloc[:, -6:].mean(axis=1)
     out["first_logp"], out["last_logp"] = first, last
     return pd.DataFrame(out, index=visible.index)
 
