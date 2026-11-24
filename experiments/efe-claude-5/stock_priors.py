@@ -5,6 +5,7 @@ Usage: uv run python experiments/efe-claude-5/stock_priors.py <variant> [--save]
   te     + OOF target encoding of STOCK_ID (signed Close return), inside the folds
   shape  + shape features from the raw 5-minute Price TS
   both   te + shape
+  add "_w" (or use "w") to also train with |Close return| sample weights (issue #24)
 """
 
 from __future__ import annotations
@@ -63,6 +64,8 @@ def add_cs_rank(df: pd.DataFrame, dates: np.ndarray, cols: list[str]) -> pd.Data
 
 
 def main(variant: str, save: bool) -> None:
+    weighted = variant == "w" or variant.endswith("_w")
+    base_variant = variant.removesuffix("_w")
     spec = config.load_spec()
     ds = io.load_dataset(spec)
     feats = io.feature_columns(ds.train, spec)
@@ -72,7 +75,7 @@ def main(variant: str, save: bool) -> None:
     weight = io.train_weight(ds, spec)
     groups = ds.train[spec.date_col].to_numpy()
 
-    if variant in ("te", "both"):
+    if base_variant in ("te", "both"):
         y_signed = ds.y_raw.iloc[:, 0].to_numpy(dtype=float) if ds.y_raw is not None else None
         key_tr = ds.train[["STOCK_ID"]].reset_index(drop=True)
         key_te = ds.test[["STOCK_ID"]].reset_index(drop=True)
@@ -81,7 +84,7 @@ def main(variant: str, save: bool) -> None:
         X = X.reset_index(drop=True).assign(stock_te=tr_e["STOCK_ID_te"].to_numpy())
         X_test = X_test.reset_index(drop=True).assign(stock_te=te_e["STOCK_ID_te"].to_numpy())
 
-    if variant in ("shape", "both"):
+    if base_variant in ("shape", "both"):
         sh_tr = shape_features(ds.train[spec.id_col].to_numpy())
         sh_te = shape_features(ds.test[spec.id_col].to_numpy())
         sh_tr = add_cs_rank(sh_tr, groups, SHAPE_COLS)
@@ -89,8 +92,10 @@ def main(variant: str, save: bool) -> None:
         X = pd.concat([X.reset_index(drop=True), sh_tr], axis=1)
         X_test = pd.concat([X_test.reset_index(drop=True), sh_te], axis=1)
 
-    print(f"variant={variant} features={X.shape[1]} folds={len(splits)}")
-    result = run_cv(spec, X, ds.y_vector, X_test, splits, "lgbm", None, weight, groups)
+    print(f"variant={variant} weighted={weighted} features={X.shape[1]} folds={len(splits)}")
+    fit_w = weight / weight.mean() if weighted else None
+    result = run_cv(spec, X, ds.y_vector, X_test, splits, "lgbm", None, weight, groups,
+                    fit_weight=fit_w)
     if save:
         run_id = tracking.save_run(result, spec, f"stockpri-{variant}",
                                    ds.train[spec.id_col].to_numpy(),
