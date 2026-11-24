@@ -1,0 +1,28 @@
+{
+  "run_id": "1124-190750_dmr-claude-2_blend-mean",
+  "slug": "blend-mean",
+  "agent": "dmr-claude-2",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5426980289288924,
+  "cv_std": 0.0,
+  "fold_scores": [
+    0.5426980289288924
+  ],
+  "model": "blend-mean",
+  "params": {
+    "runs": [
+      "1124-190437_dmr-claude-2_ridge-v1-clip0-02-reg"
+    ],
+    "w": [
+      1.0
+    ]
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "2a4c073",
+  "branch": "exp/dmr-claude-2/data-models",
+  "created": "2026-11-24T19:07:50",
+  "notes": "1124-190437_dmr-claude-2_ridge-v1-clip0-02-reg"
+}

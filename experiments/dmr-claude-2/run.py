@@ -33,15 +33,20 @@ def parse() -> argparse.Namespace:
     p.add_argument("--only-prefix", nargs="*", default=[], help="keep only these prefixes")
     p.add_argument("--cat", nargs="*", default=[], help="extra columns to treat as categorical")
     p.add_argument("--regress", action="store_true", help="fit the real target, use its sign")
+    p.add_argument("--clip-y", type=float, default=0.0, help="--regress: winsorise quantile")
     return p.parse_args()
 
 
-def regress_cv(spec, ds, X, X_test, splits, model, params, weight, fit_weight) -> CVResult:
+def regress_cv(spec, ds, X, X_test, splits, model, params, weight, fit_weight,
+               clip_q: float = 0.0) -> CVResult:
     """Fit ``model`` on the real target, score its sign with the spec's metric.
 
     Predictions are mapped to pseudo-probabilities sigmoid(pred / std) so that the 0.5
     threshold of the label metrics equals pred = 0 and runs blend with classifiers."""
     raw = ds.y_raw.iloc[:, 0].to_numpy(dtype=float)
+    if clip_q:  # winsorise the fit target only (two global quantiles; scoring uses true y)
+        lo, hi = np.quantile(raw, [clip_q, 1 - clip_q])
+        raw = np.clip(raw, lo, hi)
     rspec = replace(spec, task="regression", metric="pearson")
     res = run_cv(rspec, X, raw, X_test, splits, model, params, None, None,
                  fit_weight=fit_weight, verbose=False)
@@ -78,7 +83,8 @@ def main() -> int:
     print(f"cv={strategy} folds={len(splits)} model={args.model} features={X.shape[1]} "
           f"fit_weight={'|y|' if fit_weight is not None else 'none'} cats={cats}")
     if args.regress:
-        result = regress_cv(spec, ds, X, X_test, splits, args.model, params, weight, fit_weight)
+        result = regress_cv(spec, ds, X, X_test, splits, args.model, params, weight, fit_weight,
+                            args.clip_y)
         print(result.summary())
     else:
         result = run_cv(spec, X, ds.y_vector, X_test, splits, args.model, params, weight,

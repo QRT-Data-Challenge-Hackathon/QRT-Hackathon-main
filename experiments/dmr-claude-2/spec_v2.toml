@@ -1,7 +1,7 @@
 # dmr-claude-2's local copy of the event spec (until dmr-claude-0's competition.toml PR #9
 # merges). Use: QRTC_CONFIG=experiments/dmr-claude-2/spec_local.toml
 [competition]
-name = "qrt-eth-2026"
+name = "qrt-x-eth-hackathon-24-11-2026"
 task = "binary"
 metric = "weighted_accuracy"
 id_col = "ID"
