@@ -50,3 +50,13 @@ def sector_features(keys: pd.DataFrame, resid: np.ndarray, sector: pd.Series, st
                 idio_sec_day_t=rel.sum(axis=1) / (vol * np.sqrt(rel.shape[1])),
                 n_sector=pd.Series(codes).map(pd.Series(codes).value_counts()).to_numpy())
     return pd.DataFrame(data, index=keys.index)
+
+
+def sector_ranks(keys: pd.DataFrame, feats: pd.DataFrame, date: str, country: str
+                 ) -> pd.DataFrame:
+    """Ranks: the stock vs its sector that day, and the sector's move vs the country's others."""
+    frame = pd.concat([keys[[date, country]], feats], axis=1)
+    in_sec = frame.groupby([date, "sector"])[["idio_sec_day_t", "idio_sec_w48"]].rank(pct=True)
+    sec_in_c = frame.groupby([date, country])[["sector_day", "sector_w48", "sector_w6"]].rank(
+        pct=True)
+    return pd.concat([in_sec.add_suffix("_secrank"), sec_in_c.add_suffix("_crank")], axis=1)

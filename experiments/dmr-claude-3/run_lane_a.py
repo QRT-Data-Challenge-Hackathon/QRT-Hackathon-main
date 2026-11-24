@@ -47,6 +47,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="add per-stock feature means over all rows and today-vs-own-mean ratios")
     p.add_argument("--sectors", type=int, default=0,
                    help="K co-movement sectors (KMeans on residual paths) + vs-sector features")
+    p.add_argument("--sector-ranks", action="store_true",
+                   help="with --sectors: ranks within day x sector and of sectors in a country")
     p.add_argument("--seeds", type=int, default=1, help=f"average over the first N of {SEEDS}")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--export", default="")
@@ -106,6 +108,9 @@ def add_sectors(train: pd.DataFrame, test: pd.DataFrame, X: pd.DataFrame, X_test
     print(f"sectors: sizes {sorted(sector.value_counts().tolist(), reverse=True)}")
     new = [las.sector_features(f[keys], r, sector, spec.group_col, spec.date_col)
            for f, r in ((train, r_train), (test, r_test))]
+    if args.sector_ranks:
+        new = [pd.concat([n, las.sector_ranks(f[keys], n, spec.date_col, args.country)], axis=1)
+               for f, n in ((train, new[0]), (test, new[1]))]
     X, X_test = (pd.concat([a, b], axis=1) for a, b in zip((X, X_test), new, strict=True))
     return to_category(X, X_test, ["sector"])
 
@@ -180,6 +185,7 @@ def make_slug(args: argparse.Namespace, tag: str) -> str:
                                                                                   args.model)
     return (f"a-{args.base[0]}-{tag}-{model}{'-fw' if args.fit_weight else ''}"
             f"{'-sp' if args.stock_profile else ''}{f'-k{args.sectors}' if args.sectors else ''}"
+            f"{'r' if args.sector_ranks else ''}"
             f"{f'-x{args.seeds}' if args.seeds > 1 else ''}")
 
 
