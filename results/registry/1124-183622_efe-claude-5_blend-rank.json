@@ -1,0 +1,30 @@
+{
+  "run_id": "1124-183622_efe-claude-5_blend-rank",
+  "slug": "blend-rank",
+  "agent": "efe-claude-5",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.5428473922034387,
+  "cv_std": 0.0,
+  "fold_scores": [
+    0.5428473922034387
+  ],
+  "model": "blend-rank",
+  "params": {
+    "runs": [
+      "1124-182745_efe-claude-5_repro-dmr3-beta-idio-lgs-fw",
+      "1124-183612_efe-claude-5_usopen-beta-idio-lgs-fw"
+    ],
+    "w": [
+      1.0,
+      1.0
+    ]
+  },
+  "n_features": 0,
+  "features": [],
+  "elapsed_s": 0.0,
+  "git_sha": "a38503d",
+  "branch": "exp/efe-claude-5/stock-priors",
+  "created": "2026-11-24T18:36:22",
+  "notes": "1124-182745_efe-claude-5_repro-dmr3-beta-idio-lgs-fw,1124-183612_efe-claude-5_usopen-beta-idio-lgs-fw"
+}
