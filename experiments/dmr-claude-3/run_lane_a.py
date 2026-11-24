@@ -50,6 +50,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--sector-ranks", action="store_true",
                    help="with --sectors: ranks within day x sector and of sectors in a country")
     p.add_argument("--seeds", type=int, default=1, help=f"average over the first N of {SEEDS}")
+    p.add_argument("--target", choices=TARGETS, default="class",
+                   help="class: the 0/1 sign; reg / reg_clip: regress Close return (clip q99)")
+    p.add_argument("--stock-cat", action="store_true", help="STOCK_ID as a categorical")
+    p.add_argument("--drop", default="", help="comma list of feature columns to drop")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--export", default="")
     p.add_argument("--slug", default="")
@@ -157,25 +161,60 @@ def stock_profile(X: pd.DataFrame, X_test: pd.DataFrame, ids: pd.Series, ids_tes
 SEEDS = (0, 7, 13, 21, 42)
 
 
-def seed_averaged_cv(spec: config.Spec, X: pd.DataFrame, y: np.ndarray, X_test: pd.DataFrame,
-                     splits: list, args: argparse.Namespace, params: dict | None,
-                     weight: np.ndarray | None, groups: np.ndarray) -> CVResult:
-    """run_cv over ``args.seeds`` LightGBM bagging seeds; OOF / test averaged, folds re-scored
-    on the average (seed noise of one lgbm_shallow run is ~0.0015 here)."""
+TARGETS = ("class", "reg", "reg_clip")  # classify the sign | regress the real return (clipped)
+
+
+def fit_target(spec: config.Spec, ds: io.Dataset, kind: str) -> tuple[config.Spec, np.ndarray]:
+    """Spec + target the models are fitted on: the 0/1 sign, or the real ``Close return``
+    (regression; MSE already weights big moves like the metric does)."""
+    if kind == "class":
+        return spec, ds.y_vector
+    raw = ds.y_raw.iloc[:, 0].to_numpy(dtype=float)
+    if kind == "reg_clip":
+        lim = float(np.quantile(np.abs(raw), 0.99))
+        raw = np.clip(raw, -lim, lim)
+    return replace(spec, task="regression", metric="rmse", binarize_target=False,
+                   weight_col=None), raw
+
+
+def _seed_params(args: argparse.Namespace, params: dict | None) -> list[dict | None]:
+    """One param dict per bagging seed (LightGBM models only; others are deterministic)."""
+    if args.seeds <= 1 or not args.model.startswith("lgbm"):
+        return [params]
+    return [{**(params or {}), "bagging_seed": s, "feature_fraction_seed": s}
+            for s in SEEDS[:args.seeds]]
+
+
+def _to_prob(pred: np.ndarray, scale: float) -> np.ndarray:
+    """Regression output -> (0, 1), monotone, 0.5 at a zero return (so the sign is kept)."""
+    return 1.0 / (1.0 + np.exp(-pred / scale))
+
+
+def cv_target(spec: config.Spec, X: pd.DataFrame, X_test: pd.DataFrame, ds: io.Dataset,
+              splits: list, args: argparse.Namespace, params: dict | None) -> CVResult:
+    """Fit on ``args.target`` over the seeds; average OOF / test; score weighted accuracy
+    per fold on the average (seed noise of one lgbm_shallow run is ~0.0015 here)."""
+    spec_fit, y_fit = fit_target(spec, ds, args.target)
+    weight, groups = io.train_weight(ds, spec), ds.train[spec.date_col].to_numpy()
+    fit_w = weight if args.fit_weight else None
+    metric_w, metric_g = (weight, groups) if spec_fit is spec else (None, None)
     results = []
-    for seed in SEEDS[:args.seeds]:
-        p = {**(params or {}), "bagging_seed": seed, "feature_fraction_seed": seed}
-        results.append(run_cv(spec, X, y, X_test, splits, args.model, p, weight, groups,
-                              fit_weight=weight if args.fit_weight else None, verbose=False))
-        print(f"  seed {seed}: {results[-1].summary()}")
+    for p in _seed_params(args, params):
+        results.append(run_cv(spec_fit, X, y_fit, X_test, splits, args.model, p, metric_w,
+                              metric_g, fit_weight=fit_w, verbose=False))
+        print(f"  fit: {results[-1].summary()}")
     oof = np.mean([r.oof for r in results], axis=0)
     test = np.mean([r.test_pred for r in results], axis=0)
-    folds = tuple(score_predictions(spec, y, oof, va, weight, groups) for _, va in splits)
+    if spec_fit.task == "regression":
+        scale = float(np.nanstd(oof)) or 1.0
+        oof, test = _to_prob(oof, scale), _to_prob(test, scale)
+    folds = tuple(score_predictions(spec, ds.y_vector, oof, va, weight, groups)
+                  for _, va in splits)
     imp = pd.concat([r.importance for r in results], axis=1).mean(axis=1)
-    return replace(results[0], params={**(params or {}), "seeds": list(SEEDS[:args.seeds])},
-                   oof=oof, test_pred=test, score=float(np.mean(folds)),
-                   score_std=float(np.std(folds)), fold_scores=folds,
-                   importance=imp.sort_values(ascending=False),
+    return replace(results[0], metric=spec.metric, oof=oof, test_pred=test,
+                   params={**(params or {}), "target": args.target, "n_fits": len(results)},
+                   score=float(np.mean(folds)), score_std=float(np.std(folds)),
+                   fold_scores=folds, importance=imp.sort_values(ascending=False),
                    elapsed_s=sum(r.elapsed_s for r in results))
 
 
@@ -186,7 +225,9 @@ def make_slug(args: argparse.Namespace, tag: str) -> str:
     return (f"a-{args.base[0]}-{tag}-{model}{'-fw' if args.fit_weight else ''}"
             f"{'-sp' if args.stock_profile else ''}{f'-k{args.sectors}' if args.sectors else ''}"
             f"{'r' if args.sector_ranks else ''}"
-            f"{f'-x{args.seeds}' if args.seeds > 1 else ''}")
+            f"{f'-x{args.seeds}' if args.seeds > 1 else ''}"
+            f"{'' if args.target == 'class' else '-' + args.target.replace('_', '')}"
+            f"{'-sc' if args.stock_cat else ''}")
 
 
 def compare(baseline: str, result: CVResult) -> str:
@@ -241,19 +282,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.stock_profile:
         X, X_test = stock_profile(X, X_test, ds.train[spec.id_col], ds.test[spec.id_col],
                                   spec.group_col)
-    y = ds.y_vector
-    splits = make_splits(ds.train, y, spec, test=ds.test)
-    weight = io.train_weight(ds, spec)
+    if args.stock_cat:
+        X, X_test = to_category(X, X_test, [spec.group_col])
+    if args.drop:
+        cols = [c.strip() for c in args.drop.split(",") if c.strip()]
+        X, X_test = X.drop(columns=cols), X_test.drop(columns=cols)
+    splits = make_splits(ds.train, ds.y_vector, spec, test=ds.test)
     params = json.loads(args.params) if args.params else None
     print(f"families={families} base={args.base} model={args.model} feats={X.shape[1]} "
-          f"folds={len(splits)} fit_weight={args.fit_weight} spec={spec.name} cv={spec.cv}")
-    groups = ds.train[spec.date_col].to_numpy()
-    if args.seeds > 1:
-        result = seed_averaged_cv(spec, X, y, X_test, splits, args, params, weight, groups)
-        print(result.summary())
-    else:
-        result = run_cv(spec, X, y, X_test, splits, args.model, params, weight, groups,
-                        fit_weight=weight if args.fit_weight else None)
+          f"folds={len(splits)} fit_weight={args.fit_weight} target={args.target} "
+          f"spec={spec.name} cv={spec.cv}")
+    result = cv_target(spec, X, X_test, ds, splits, args, params)
+    print(result.summary())
     print(compare(args.baseline, result))
     print("top features:", ", ".join(result.importance.head(10).index.astype(str)))
     tag = "-".join(families) or "none"
@@ -263,7 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         slug = args.slug or make_slug(args, tag)
         notes = json.dumps({"families": families, "base": args.base, "model": args.model,
                             "fit_weight": args.fit_weight, "stock_profile": args.stock_profile,
-                            "sectors": args.sectors,
+                            "sectors": args.sectors, "target": args.target,
+                            "stock_cat": args.stock_cat, "seeds": args.seeds,
                             "baseline": args.baseline})
         save(result, spec, ds, slug, notes)
     return 0
