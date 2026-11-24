@@ -11,17 +11,19 @@
 # cv:     auto | date_blocks | time | group | stratified | kfold   (see src/qrtc/cv.py)
 
 [competition]
-name = "rehearsal-stock_sign"
+name = "qrt-x-eth-hackathon-24-11-2026"   # Kaggle: predict the last 30 minutes (2-hour event)
 task = "binary"
-metric = "accuracy"
+metric = "weighted_accuracy"
 id_col = "ID"
-target_cols = ["RET"]         # survival: [time_col, event_col]; one-hot multiclass: all columns
-date_col = "DATE"             # cross-section / time key ("" if none). Drives CV + per-date ops
-group_col = "STOCK"           # entity key ("" if none)
-weight_col = ""               # metric weight column, e.g. for weighted_accuracy
+target_cols = ["Close return"]   # cutoff->close return minus its DATE_ID x COUNTRY mean
+date_col = "DATE_ID"          # SHUFFLED day id: test days come later, but ids interleave
+group_col = "STOCK_ID"        # 386 stocks, the same in train and test
+weight_col = "abs_target"     # metric weight = |Close return| (bigger moves count more)
+binarize_target = true        # Kaggle scores only the sign; an exact 0 is always wrong
+signed_labels = true          # so submissions hold +1/-1, never 0/1
 submission_cols = []          # output columns if different from target_cols (e.g. ["risk_score"])
-drop_cols = []                # never use as features (leaky ids, free-text, ...)
-cv = "auto"
+drop_cols = ["DATE_ID"]       # shuffled id: not a feature (still used for the CV groups)
+cv = "date_blocks"            # groups of whole days (ids are shuffled, so blocks are random days)
 n_splits = 5
 embargo = 0                   # dates dropped either side of a validation block
 seed = 42
@@ -29,12 +31,12 @@ seed = 42
 [metric_params]               # extra kwargs for the metric, e.g. tau = 7.0 for ipcw_cindex
 
 [files]                       # relative to the main checkout (shared by all worktrees)
-dir = "data/synthetic/stock_sign"
-x_train = "X_train.csv"
+dir = "data/raw/qrt-x-eth-hackathon-24-11-2026"   # `kaggle competitions download`, unzipped
+x_train = "prep/x_train.parquet"   # built by scripts/prep_last30.py (flat features)
 y_train = "y_train.csv"       # "" if the target is inside x_train
-x_test = "X_test.csv"
-sample_submission = "sample_submission.csv"
-hidden_y_test = "y_test_hidden.csv"   # rehearsal only; "" at the event
+x_test = "prep/x_submit.parquet"   # ALL 219,157 ids: Kaggle wants train ids too in every file
+sample_submission = ""
+hidden_y_test = ""
 
 # [upload] — who may upload, and where. Fill it at the briefing (docs/PLAYBOOK.md §3):
 #   backend  local   rehearsal only: scores against hidden_y_test, public/private split
@@ -47,11 +49,11 @@ hidden_y_test = "y_test_hidden.csv"   # rehearsal only; "" at the event
 #   max_total / max_per_day: the platform's limits (0 = none); reserve_final: slots that only
 #   `--final` uploads may use (set 2 at the event: the two finals)
 [upload]
-backend = "local"
-uploaders = ["*"]
-max_total = 8
-max_per_day = 0
+backend = "kaggle"
+uploaders = ["dmr-claude-0"]    # the ONLY Submitter (session "agent 1 submitter")
+max_total = 0
+max_per_day = 5               # assumed Kaggle default; raise it if the Submit page shows more
 reserve_final = 2
 public_fraction = 0.5
 url = ""                      # browser: submission page; http: POST endpoint (https only)
-competition = ""              # kaggle: competition slug
+competition = "qrt-x-eth-hackathon-24-11-2026"   # kaggle: competition slug
