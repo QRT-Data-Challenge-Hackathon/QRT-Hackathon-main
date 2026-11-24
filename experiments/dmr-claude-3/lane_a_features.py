@@ -193,4 +193,4 @@ def build_features(df: pd.DataFrame, date: str, country: str, families: Sequence
     parts = [ret] if "ret" in families else []
     parts += [FAMILIES[f](keys, ret, date, country) for f in families if f in FAMILIES]
     parts += [PATH_FAMILIES[f](keys, lp, date, country) for f in families if f in PATH_FAMILIES]
-    return pd.concat(parts, axis=1)
+    return pd.concat(parts, axis=1) if parts else pd.DataFrame(index=df.index)

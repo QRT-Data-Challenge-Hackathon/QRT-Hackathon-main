@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                     fit_weight=weight if args.fit_weight else None)
     print(compare(args.baseline, result))
     print("top features:", ", ".join(result.importance.head(10).index.astype(str)))
-    tag = "-".join(families)
+    tag = "-".join(families) or "none"
     if args.export:
         export(args.export, tag, ds, spec, X, X_test)
     if not args.no_save:
