@@ -29,6 +29,8 @@ def _format_values(spec: Spec, pred: np.ndarray, classes: tuple | None,
         return {c: (labels == i).astype(int) for i, c in enumerate(cols)}
     if spec.task in ("binary", "multiclass") and spec.metric in LABEL_METRICS:
         idx = pred.argmax(axis=1) if pred.ndim == 2 else (pred > threshold).astype(int)
+        if spec.signed_labels:  # sign-scored platforms count an exact 0 as wrong
+            return {cols[0]: np.where(idx == 1, 1, -1)}
         values = np.asarray(classes, dtype=object)[idx] if classes else idx
         return {cols[0]: np.asarray(values.tolist())}
     if pred.ndim == 2:
