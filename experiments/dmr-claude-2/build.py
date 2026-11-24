@@ -66,6 +66,8 @@ def main() -> int:
     X_tr.to_parquet(out / "X_train.parquet", index=False)
     y_tr.to_parquet(out / "y_train.parquet", index=False)
     X_te.to_parquet(out / "X_test.parquet", index=False)
+    # Kaggle wants every ID (train ids too) in each submission file
+    pd.concat([X_tr, X_te], ignore_index=True).to_parquet(out / "X_submit.parquet", index=False)
     print(f"wrote {out}: X_train {X_tr.shape}, X_test {X_te.shape} in {time.time() - start:.0f}s")
     return 0
 
