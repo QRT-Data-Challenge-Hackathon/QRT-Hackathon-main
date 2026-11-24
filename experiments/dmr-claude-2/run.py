@@ -28,6 +28,7 @@ def parse() -> argparse.Namespace:
     p.add_argument("--no-fit-weight", action="store_true", help="train unweighted")
     p.add_argument("--drop-prefix", nargs="*", default=[], help="drop features with prefix")
     p.add_argument("--only-prefix", nargs="*", default=[], help="keep only these prefixes")
+    p.add_argument("--cat", nargs="*", default=[], help="extra columns to treat as categorical")
     return p.parse_args()
 
 
@@ -42,6 +43,7 @@ def main() -> int:
     ds = io.load_dataset(spec)
     feats = select(io.feature_columns(ds.train, spec), args.drop_prefix, args.only_prefix)
     cats = [c for c in auto_categoricals(ds.train[feats]) if c in feats]
+    cats += [c for c in args.cat if c in feats and c not in cats]
     X, X_test = to_category(ds.train[feats], ds.test[feats], cats)
     strategy = args.cv or (detect_strategy(ds.train, ds.test, spec) if spec.cv == "auto"
                            else spec.cv)
