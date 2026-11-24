@@ -1,14 +1,28 @@
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from qrtc import submit
+from qrtc import config, submit
 
 
 def test_binary_labels_use_original_classes(spec_for):
     spec = spec_for("stock_sign")
     sub = submit.build_submission(spec, np.array([1, 2]), np.array([0.7, 0.2]), (False, True))
     assert sub["RET"].tolist() == [True, False]
+
+
+def test_signed_labels_write_plus_minus_one(spec_for):
+    # Kaggle 24/11/2026 scores sign(prediction); an exact 0 is always wrong, so 0/1 labels fail.
+    spec = dataclasses.replace(spec_for("allocation"), signed_labels=True)
+    sub = submit.build_submission(spec, np.array([1, 2, 3]), np.array([0.7, 0.2, 0.5]), (0, 1))
+    assert sub[spec.out_cols[0]].tolist() == [1, -1, -1]
+
+
+def test_signed_labels_need_binary_task(spec_for):
+    with pytest.raises(config.SpecError, match="signed_labels"):
+        config._validate(dataclasses.replace(spec_for("electricity"), signed_labels=True))
 
 
 def test_multiclass_one_hot_output(spec_for):
