@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from sklearn.compose import make_column_selector, make_column_transformer
 from sklearn.impute import SimpleImputer
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
 from qrtc import foundation
@@ -114,6 +114,9 @@ class Model:
             y = _survival_target(self.name, y)
         if X_val is not None and fit_kwargs.pop("use_eval_set", False):
             fit_kwargs["eval_set"] = [(self._prep(X_val), y_val)]
+        if isinstance(self.estimator, Pipeline) and "sample_weight" in fit_kwargs:
+            last_step = self.estimator.steps[-1][0]  # Pipeline routes weights per step
+            fit_kwargs[f"{last_step}__sample_weight"] = fit_kwargs.pop("sample_weight")
         self.estimator.fit(Xp, y, **fit_kwargs)
         return self
 
