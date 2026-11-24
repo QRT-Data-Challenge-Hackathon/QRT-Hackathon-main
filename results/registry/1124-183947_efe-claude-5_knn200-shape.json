@@ -1,0 +1,47 @@
+{
+  "run_id": "1124-183947_efe-claude-5_knn200-shape",
+  "slug": "knn200-shape",
+  "agent": "efe-claude-5",
+  "competition": "qrt-x-eth-hackathon-24-11-2026",
+  "metric": "weighted_accuracy",
+  "cv": 0.526341044959916,
+  "cv_std": 0.004237587933916231,
+  "fold_scores": [
+    0.5284279164948251,
+    0.5285723343793345,
+    0.5225121577413427,
+    0.5203661375711498,
+    0.5318266786129275
+  ],
+  "model": "knn200",
+  "params": {
+    "k": 200
+  },
+  "n_features": 19,
+  "features": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18"
+  ],
+  "elapsed_s": 67.0,
+  "git_sha": "6c9e07e",
+  "branch": "exp/efe-claude-5/stock-priors",
+  "created": "2026-11-24T18:39:47",
+  "notes": "issue #35"
+}
