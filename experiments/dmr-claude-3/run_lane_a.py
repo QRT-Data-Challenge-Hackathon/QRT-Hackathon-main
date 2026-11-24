@@ -21,6 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lane_a_features as laf  # noqa: E402
+import lane_a_sectors as las  # noqa: E402
 
 from qrtc import config, io, submit, tracking  # noqa: E402
 from qrtc.cv import make_splits  # noqa: E402
@@ -43,6 +44,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--fit-weight", action="store_true")
     p.add_argument("--stock-profile", action="store_true",
                    help="add per-stock feature means over all rows and today-vs-own-mean ratios")
+    p.add_argument("--sectors", type=int, default=0,
+                   help="K co-movement sectors (KMeans on residual paths) + vs-sector features")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--export", default="")
     p.add_argument("--slug", default="")
@@ -77,20 +80,48 @@ def base_columns(frame: pd.DataFrame, spec: config.Spec, base: str, country: str
                                                                      (list, np.ndarray))]
 
 
-def features_for(ds: io.Dataset, spec: config.Spec, args: argparse.Namespace,
-                 families: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Base columns + the requested families, built for train and test separately."""
+def frames_with_prices(ds: io.Dataset, spec: config.Spec, args: argparse.Namespace
+                       ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Train / test frames with ``Price TS`` (re-attached from the raw files if needed)."""
     train, test = ds.train, ds.test
     if laf.PRICE_COL not in train.columns or laf.PRICE_COL not in test.columns:
         raw = load_raw(args.raw_dir, spec.id_col)
         train, test = (with_raw_columns(f, raw, spec.id_col) for f in (train, test))
+    return train, test
+
+
+def add_sectors(train: pd.DataFrame, test: pd.DataFrame, X: pd.DataFrame, X_test: pd.DataFrame,
+                spec: config.Spec, args: argparse.Namespace) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cluster stocks into ``args.sectors`` co-movement sectors (features of all rows, no
+    target) and add residual-vs-sector features."""
+    keys = [spec.id_col, spec.date_col, args.country, spec.group_col]
+    r_train = las.residual_paths(train, spec.date_col, args.country)
+    r_test = las.residual_paths(test, spec.date_col, args.country)
+    rows = pd.concat([train[keys], test[keys]], ignore_index=True)
+    first = ~rows[spec.id_col].duplicated().to_numpy()
+    sector = las.stock_clusters(rows[first], np.vstack([r_train, r_test])[first],
+                                spec.group_col, spec.date_col, args.sectors, spec.seed)
+    print(f"sectors: sizes {sorted(sector.value_counts().tolist(), reverse=True)}")
+    new = [las.sector_features(f[keys], r, sector, spec.group_col, spec.date_col)
+           for f, r in ((train, r_train), (test, r_test))]
+    X, X_test = (pd.concat([a, b], axis=1) for a, b in zip((X, X_test), new, strict=True))
+    return to_category(X, X_test, ["sector"])
+
+
+def features_for(ds: io.Dataset, spec: config.Spec, args: argparse.Namespace,
+                 families: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Base columns + the requested families, built for train and test separately."""
+    train, test = frames_with_prices(ds, spec, args)
     base = base_columns(ds.train, spec, args.base, args.country)
     new_train = laf.build_features(train, spec.date_col, args.country, families)
     new_test = laf.build_features(test, spec.date_col, args.country, families)
     X = pd.concat([train[base], new_train.drop(columns=base, errors="ignore")], axis=1)
     X_test = pd.concat([test[base], new_test.drop(columns=base, errors="ignore")], axis=1)
     cats = [c for c in auto_categoricals(X) if c in X.columns] + [args.country]
-    return to_category(X, X_test, sorted(set(cats) & set(X.columns)))
+    X, X_test = to_category(X, X_test, sorted(set(cats) & set(X.columns)))
+    if args.sectors:
+        X, X_test = add_sectors(train, test, X, X_test, spec, args)
+    return X, X_test
 
 
 PROFILE_COLS = ("vol", "vol_last12", "idio_vol", "beta", "corr_country", "tick_rel",
@@ -121,7 +152,7 @@ def make_slug(args: argparse.Namespace, tag: str) -> str:
     model = {"lgbm_shallow": "lgs", "logreg": "lr", "catboost_shallow": "cbs"}.get(args.model,
                                                                                   args.model)
     return (f"a-{args.base[0]}-{tag}-{model}{'-fw' if args.fit_weight else ''}"
-            f"{'-sp' if args.stock_profile else ''}")
+            f"{'-sp' if args.stock_profile else ''}{f'-k{args.sectors}' if args.sectors else ''}")
 
 
 def compare(baseline: str, result: CVResult) -> str:
@@ -194,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         slug = args.slug or make_slug(args, tag)
         notes = json.dumps({"families": families, "base": args.base, "model": args.model,
                             "fit_weight": args.fit_weight, "stock_profile": args.stock_profile,
+                            "sectors": args.sectors,
                             "baseline": args.baseline})
         save(result, spec, ds, slug, notes)
     return 0
